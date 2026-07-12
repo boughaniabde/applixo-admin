@@ -1,5 +1,5 @@
 /**
- * app.js
+ * app.js (LocalStorage Edition)
  * Application entry point. Boots the UI, gates access behind the
  * password/lock screen, wires navigation between views, and contains
  * the view-specific rendering logic (dashboard stats, posts list +
@@ -23,8 +23,8 @@ const App = {
     this._bindNav();
     this._bindGlobalActions();
 
-    // If config.enc doesn't exist yet, guide the user through first-run setup.
-    const exists = await fetch('data/config.enc', { cache: 'no-store' }).then((r) => r.ok).catch(() => false);
+    // الفحص المعدل: نتحقق الآن من المتصفح مباشرة بدلاً من عمل fetch لملف خارجي
+    const exists = Auth.isBootstrapped();
     document.getElementById('lock-mode-hint').textContent = exists
       ? 'أدخل كلمة المرور لفتح لوحة التحكم'
       : 'لا يوجد إعداد بعد — أدخل كلمة مرور جديدة لإنشائه';
@@ -39,7 +39,6 @@ const App = {
     const form = document.getElementById('lock-form');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      alert("تم الضغط");
       const password = document.getElementById('lock-password').value;
       if (!password || password.length < 6) {
         UI.toast('كلمة المرور يجب ألا تقل عن 6 أحرف', 'error');
@@ -63,56 +62,42 @@ const App = {
     });
   },
 
-  /** First run: collect the minimum secrets needed, encrypt, offer to download config.enc. */
+  /** التهيئة لأول مرة: جمع البيانات وحفظها مشفرة داخل الـ localStorage تلقائياً */
   async _runFirstTimeSetup(password) {
     const secrets = await new Promise((resolve) => {
       UI.openModal({
         title: 'إعداد أول مرة',
         body: `
-          <p>أدخل بيانات الاتصال الأساسية. يمكنك تعديلها لاحقاً من صفحة الإعدادات.</p>
-          <div class="field"><label>Blog ID</label><input type="text" id="s-blogId"></div>
+          <p>أدخل بيانات الاتصال الأساسية لمدونتك. يمكنك تعديلها أو إكمالها لاحقاً من صفحة الإعدادات.</p>
+          <div class="field"><label>Blog ID</label><input type="text" id="s-blogId" placeholder="مثال: 1234567890"></div>
           <div class="field"><label>Google OAuth Client ID</label><input type="text" id="s-clientId"></div>
           <div class="field"><label>Google OAuth Client Secret</label><input type="password" id="s-clientSecret"></div>
-          <div class="field"><label>Refresh Token</label><input type="password" id="s-refreshToken"></div>
-          <div class="field"><label>ImgBB API Key</label><input type="password" id="s-imgbb"></div>
-          <div class="field"><label>GitHub Token (لحفظ التغييرات في المستودع)</label><input type="password" id="s-ghtoken"></div>
-          <div class="field-row">
-            <div class="field"><label>GitHub Owner</label><input type="text" id="s-ghowner"></div>
-            <div class="field"><label>GitHub Repo</label><input type="text" id="s-ghrepo"></div>
-          </div>
+          <div class="field"><label>Refresh Token (اختياري - سيتم توليده عند ربط الحساب)</label><input type="password" id="s-refreshToken"></div>
+          <div class="field"><label>ImgBB API Key (اختياري)</label><input type="password" id="s-imgbb"></div>
         `,
         actions: [{
-          label: 'إنشاء',
+          label: 'إنشاء وحفظ بالمتصفح',
           cls: 'btn-primary',
           close: true,
           onClick: () => resolve({
-  blogId: document.getElementById('s-blogId').value.trim() || '000000000',
-  clientId: document.getElementById('s-clientId').value.trim() || 'demo-client-id',
-  clientSecret: document.getElementById('s-clientSecret').value.trim() || 'demo-secret',
-  refreshToken: document.getElementById('s-refreshToken').value.trim() || 'demo-refresh-token',
-  imgbbApiKey: document.getElementById('s-imgbb').value.trim() || '',
-  geminiApiKey: '',
-  githubToken: document.getElementById('s-ghtoken').value.trim() || '',
-  githubOwner: document.getElementById('s-ghowner').value.trim() || '',
-  githubRepo: document.getElementById('s-ghrepo').value.trim() || '',
-  githubBranch: 'main',
-}),
+            blogId: document.getElementById('s-blogId').value.trim() || '000000000',
+            clientId: document.getElementById('s-clientId').value.trim() || 'demo-client-id',
+            clientSecret: document.getElementById('s-clientSecret').value.trim() || 'demo-secret',
+            refreshToken: document.getElementById('s-refreshToken').value.trim() || '',
+            imgbbApiKey: document.getElementById('s-imgbb').value.trim() || '',
+            geminiApiKey: '',
+            githubToken: '',
+            githubOwner: '',
+            githubRepo: '',
+            githubBranch: 'main',
+          }),
         }],
       });
     });
 
-    const payload = await Auth.createConfig(secrets, password);
-    if (secrets.githubToken && secrets.githubOwner && secrets.githubRepo) {
-      try {
-        await GitHub.putFile('data/config.enc', JSON.stringify(payload, null, 2), 'chore: bootstrap config.enc');
-        UI.toast('تم إنشاء config.enc وحفظه في المستودع', 'success');
-        return;
-      } catch (err) {
-        UI.toast(`تعذّر الحفظ التلقائي في GitHub: ${err.message}`, 'error');
-      }
-    }
-    Auth.downloadJSON(payload, 'config.enc');
-    UI.toast('تم تنزيل config.enc — ضعه يدوياً داخل مجلد data/', 'info');
+    // الحفظ مباشرة في الـ LocalStorage
+    await Auth.createConfig(secrets, password);
+    UI.toast('تم حفظ الإعدادات بنجاح في متصفحك!', 'success');
   },
 
   /* ================================================================ */
@@ -555,7 +540,7 @@ const App = {
       });
       card.querySelector('.edit-btn').addEventListener('click', () => this._projectModal(Projects.find(id)));
       card.querySelector('.del-btn').addEventListener('click', async () => {
-        const ok = await UI.confirm({ title: 'حذف المشروع', body: 'سيتم حذف المشروع نهائياً من projects.json.' });
+        const ok = await UI.confirm({ title: 'حذف المشروع', body: 'سيتم حذف المشروع نهائياً.' });
         if (!ok) return;
         try { await Projects.remove(id); this._renderProjectsGrid(); this._renderProjectSwitch(); UI.toast('تم الحذف', 'success'); }
         catch (err) { UI.toast(err.message, 'error'); }
@@ -618,7 +603,7 @@ const App = {
     const el = document.getElementById('view-settings');
     const c = Auth.config || {};
     el.innerHTML = `
-      <div class="page-head"><div><h1>الإعدادات</h1><p>بيانات الاتصال — مشفّرة داخل config.enc</p></div></div>
+      <div class="page-head"><div><h1>الإعدادات</h1><p>بيانات الاتصال — مشفّرة داخل متصفحك</p></div></div>
       <div class="panel glass">
         <div class="settings-section">
           <h4>Blogger</h4>
@@ -635,15 +620,7 @@ const App = {
           <div class="field"><label>ImgBB API Key</label><input type="password" id="cfg-imgbb" value="${c.imgbbApiKey || ''}"></div>
           <div class="field"><label>Gemini API Key</label><input type="password" id="cfg-gemini" value="${c.geminiApiKey || ''}"></div>
         </div>
-        <div class="settings-section">
-          <h4>GitHub (لحفظ config.enc و projects.json)</h4>
-          <div class="field-row">
-            <div class="field"><label>Owner</label><input type="text" id="cfg-ghowner" value="${c.githubOwner || ''}"></div>
-            <div class="field"><label>Repo</label><input type="text" id="cfg-ghrepo" value="${c.githubRepo || ''}"></div>
-          </div>
-          <div class="field"><label>Token</label><input type="password" id="cfg-ghtoken" value="${c.githubToken || ''}"></div>
-        </div>
-        <button class="btn btn-primary" id="save-settings-btn">حفظ الإعدادات</button>
+        <button class="btn btn-primary" id="save-settings-btn">حفظ الإعدادات في المتصفح</button>
       </div>`;
 
     document.getElementById('save-settings-btn').addEventListener('click', async () => {
@@ -654,14 +631,11 @@ const App = {
         refreshToken: document.getElementById('cfg-refreshToken').value.trim(),
         imgbbApiKey: document.getElementById('cfg-imgbb').value.trim(),
         geminiApiKey: document.getElementById('cfg-gemini').value.trim(),
-        githubOwner: document.getElementById('cfg-ghowner').value.trim(),
-        githubRepo: document.getElementById('cfg-ghrepo').value.trim(),
-        githubToken: document.getElementById('cfg-ghtoken').value.trim(),
       });
       try {
         UI.showLoading('جارِ الحفظ...');
         await Auth.persistConfig();
-        UI.toast('تم حفظ الإعدادات في config.enc', 'success');
+        UI.toast('تم تحديث الإعدادات المشفرة داخل الـ LocalStorage بنجاح', 'success');
       } catch (err) {
         UI.toast(err.message, 'error');
       } finally { UI.hideLoading(); }
@@ -669,4 +643,6 @@ const App = {
   },
 };
 
-document.addEventListener("DOMContentLoaded", () => {     alert("App يعمل");     App.init(); });
+document.addEventListener("DOMContentLoaded", () => {
+  App.init();
+});
