@@ -611,13 +611,93 @@ const App = {
 
   _collectStep(step, cb, validate = true) {
     const d = this.state.wizardData;
-    if (step === 1) {
-      d.name = document.getElementById('w-name').value.trim();
-      d.developer = document.getElementById('w-developer').value.trim();
-      d.description = document.getElementById('w-description').value.trim();
-      d.icon = document.getElementById('w-icon').value.trim();
-      if (validate && !d.name) return UI.toast('اسم التطبيق مطلوب', 'error');
+        if (step === 1) {
+      document.getElementById('w-gemini-btn')?.addEventListener('click', async () => {
+        const appName = document.getElementById('w-name').value.trim();
+        let apiKey = '';
+        
+        // 1. محاولة جلب المفتاح بكافة الطرق الممكنة المخزنة في جهازك
+        try {
+          if (typeof Auth !== 'undefined' && Auth.config && Auth.config.geminiApiKey) {
+            apiKey = Auth.config.geminiApiKey;
+          }
+          if (!apiKey) {
+            const encryptedData = localStorage.getItem('blogger_control_config');
+            if (encryptedData) {
+              const parsed = JSON.parse(encryptedData);
+              apiKey = parsed.geminiApiKey || '';
+            }
+          }
+          if (!apiKey) {
+            const fallback = JSON.parse(localStorage.getItem('b_config') || localStorage.getItem('app_secrets') || '{}');
+            apiKey = fallback?.geminiApiKey || '';
+          }
+        } catch(e) { console.error(e); }
+
+        // 2. التحقق من المدخلات والمفاتيح
+        if (!appName) {
+          UI.toast('يرجى إدخال اسم التطبيق أولاً!', 'error');
+          return;
+        }
+        if (!apiKey) {
+          UI.toast('خطأ: لم يتم العثور على مفتاح Gemini في الذاكرة المحلية!', 'error');
+          return;
+        }
+
+        const btn = document.getElementById('w-gemini-btn');
+        const originalText = btn.innerText;
+        btn.innerText = '⏳ جاري الاتصال بـ Flash...';
+        btn.disabled = true;
+
+        try {
+          // 3. الاتصال بموديل Flash الأحدث والمستقر
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `أنت مساعد وخبير سيو متخصص في تطبيقات أندرويد. قم باستخراج وإنشاء بيانات تطبيق "${appName}" بصيغة JSON كالتالي تماماً وبدون أي نصوص برمجية أخرى خارج القوسين: {"developer": "اسم المطور", "description": "وصف ومراجعة شاملة واحترافية جداً ومغرية للتحميل ومتوافقة تماماً مع شروط سيو جوجل للمقالات"، "version": "1.0", "size": "45MB", "android": "6.0+"}. اكتب الوصف باللغة العربية الفصحى.` }] }]
+            })
+          });
+
+          // 4. فحص استجابة السيرفر بدقة
+          if (!response.ok) {
+            const errRes = await response.json().catch(() => ({}));
+            const msg = errRes?.error?.message || `كود حالة السيرفر: ${response.status}`;
+            throw new Error(`جوجل رفضت الطلب: ${msg}`);
+          }
+
+          const resData = await response.json();
+          if (!resData.candidates || !resData.candidates[0]) {
+            throw new Error('السيرفر لم يرجع أي بيانات (Candidates فارغة).');
+          }
+
+          let rawText = resData.candidates[0].content.parts[0].text;
+          
+          // تنظيف علامات القبس والنصوص الزائدة
+          rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                           
+          const cleanJson = JSON.parse(rawText);
+
+          if (document.getElementById('w-developer')) document.getElementById('w-developer').value = cleanJson.developer || '';
+          if (document.getElementById('w-description')) document.getElementById('w-description').value = cleanJson.description || '';
+          
+          this.state.wizardData.version = cleanJson.version || '1.0';
+          this.state.wizardData.size = cleanJson.size || 'عبر الرابط';
+          this.state.wizardData.android = cleanJson.android || '5.0+';
+          this.state.wizardData.updatedAt = new Date().toISOString().split('T')[0];
+
+          UI.toast('تم التوليد بنجاح عبر Gemini 1.5 Flash!', 'success');
+        } catch (err) {
+          console.error("خطأ التوليد الشامل:", err);
+          // إظهار الخطأ الحقيقي صراحة لإلغاء الغموض
+          UI.toast(`فشل التوليد الفعلي: ${err.message}`, 'error');
+        } finally {
+          btn.innerText = originalText;
+          btn.disabled = false;
+        }
+      });
     }
+
     if (step === 2) {
       d.version = document.getElementById('w-version').value.trim();
       d.size = document.getElementById('w-size').value.trim();
