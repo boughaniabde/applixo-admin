@@ -1,36 +1,38 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Blogger Control — لوحة تحكم المدونة</title>
-<meta name="robots" content="noindex, nofollow">
-<link rel="stylesheet" href="css/style.css">
-<link rel="stylesheet" href="css/dark.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blogger Control — لوحة تحكم المدونة</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dark.css">
+  <style>
+    /* تحسينات سريعة لضمان مرونة الواجهة والوضعية الجديدة */
+    :root { font-family: 'Cairo', sans-serif; }
+    .hidden { display: none !important; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .dashboard-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .config-card { background: var(--glass-bg); padding: 20px; border-radius: var(--radius-md); border: 1px solid var(--glass-border); }
+    .back-to-home-btn { display: flex; align-items: center; gap: 6px; background: var(--glass-sub); border: 1px solid var(--glass-border); color: var(--text-primary); padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 600; }
+    .back-to-home-btn:hover { color: var(--color-accent); }
+    .wizard-step { background: var(--glass-bg); border: 1px solid var(--glass-border); padding: 24px; border-radius: var(--radius-lg); margin-bottom: 20px; }
+    .direct-link-indicator { font-size: 11.5px; color: var(--color-success); margin-top: 4px; display: block; }
+  </style>
 </head>
 <body>
-
-  <!-- ===================== Lock screen ===================== -->
-  <div id="lock-screen">
-    <form id="lock-form" class="box glass">
-      <div class="orb-lg"></div>
-      <h2 style="margin:0 0 6px;">Blogger Control</h2>
-      <p id="lock-mode-hint" class="muted" style="font-size:13px;margin-bottom:18px;">جارِ التحقق من الإعداد...</p>
-      <div class="field" style="text-align:right;">
-        <label>كلمة المرور</label>
-        <input type="password" id="lock-password" placeholder="••••••••" autocomplete="current-password" required minlength="6">
-      </div>
-      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:6px;">دخول</button>
-      <p class="muted" style="font-size:11.5px;margin-top:14px;">لا يتم حفظ كلمة المرور في أي مكان — تُستخدم فقط لفك تشفير config.enc في هذه الجلسة.</p>
-    </form>
-  </div>
 
   <!-- ===================== App shell ===================== -->
   <div id="app-shell">
 
+    <!-- القائمة الجانبية (Sidebar) -->
     <aside class="sidebar glass">
       <div class="brand">
-        <span class="orb warn" id="conn-orb" title="جارِ الاتصال..."></span>
+        <span class="orb warn" id="conn-orb" title="جاهز..."></span>
         Blogger Control
       </div>
 
@@ -42,11 +44,11 @@
         </div>
         <div class="nav-item" data-view="posts">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h4"/></svg>
-          المقالات
+          المقالات والمسودات
         </div>
         <div class="nav-item" data-view="newpost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          مقال جديد
+          معالج مقال جديد
         </div>
       </nav>
 
@@ -58,52 +60,212 @@
         </div>
         <div class="nav-item" data-view="settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1 1.55V21a2 2 0 01-4 0v-.09a1.7 1.7 0 00-1-1.55 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.55-1H3a2 2 0 010-4h.09a1.7 1.7 0 001.55-1 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001-1.55V3a2 2 0 014 0v.09a1.7 1.7 0 001 1.55 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.55 1H21a2 2 0 010 4h-.09a1.7 1.7 0 00-1.55 1z"/></svg>
-          الإعدادات
+          الإعدادات المفصلة
         </div>
       </nav>
 
       <div class="sidebar-footer">
         <div class="project-switch glass" id="current-project" onclick="App.navigate('projects')">
           <div class="ph"></div>
-          <div class="meta"><b>لا يوجد مشروع</b><span>اضغط للإدارة</span></div>
+          <div class="meta"><b>لا يوجد مشروع حالي</b><span>اضغط للإدارة</span></div>
         </div>
-        <button class="btn btn-ghost btn-sm" id="lock-btn" style="width:100%;">🔒 قفل اللوحة</button>
+        <!-- تم تعديل الزر ليعمل كمنظف كاش وإعادة تعيين اللوحة الفورية -->
+        <button class="btn btn-ghost btn-sm" id="lock-btn" style="width:100%;">🔄 تحديث وإعادة تعيين</button>
       </div>
     </aside>
 
+    <!-- الهيكل الرئيسي للمحتوى (Main Content) -->
     <div class="main">
       <div class="topbar glass">
         <button class="icon-btn" id="sidebar-toggle" style="display:none;">☰</button>
+        
+        <!-- زر العودة السريع المخصص للتصفح المريح من الهاتف -->
+        <button class="back-to-home-btn" id="back-to-dashboard-trigger" onclick="App.navigate('dashboard')" title="العودة للرئيسية">
+          <span>🏠 الرئيسية</span>
+        </button>
+
         <div class="search glass">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          <input type="text" id="global-search" placeholder="ابحث عن مقال...">
+          <input type="text" id="global-search" placeholder="ابحث في المسودات أو المقالات...">
         </div>
         <button class="icon-btn" id="theme-toggle" title="تبديل الوضع الليلي/النهاري">🌓</button>
       </div>
 
       <div class="content">
-        <section class="view active" id="view-dashboard"></section>
-        <section class="view" id="view-posts"></section>
-        <section class="view" id="view-newpost"></section>
-        <section class="view" id="view-projects"></section>
-        <section class="view" id="view-settings"></section>
+        
+        <!-- ===================== [1] واجهة لوحة المعلومات (Dashboard) ===================== -->
+        <section class="view active" id="view-dashboard">
+          <div class="dashboard-header" style="margin-bottom: 20px;">
+            <h2>أهلاً بك في لوحة تحكم مدونتك التقنية</h2>
+            <p class="muted">إدارة سريعة ومباشرة للمعطيات والمفاتيح من واجهة واحدة</p>
+          </div>
+
+          <!-- تعديل المعطيات مباشرة من الرئيسية -->
+          <div class="config-card style="margin-bottom: 24px;">
+            <h3 style="margin-top:0; margin-bottom:14px; font-size:16px;">⚙️ تعديل المعطيات الأساسية السريع</h3>
+            <div class="dashboard-meta-grid">
+              <div class="field">
+                <label>رقم معرف المدونة (Blog ID)</label>
+                <input type="text" id="quick-blog-id" placeholder="مثال: 33315545...">
+              </div>
+              <div class="field">
+                <label>مفتاح التحديث (Refresh Token)</label>
+                <input type="password" id="quick-refresh-token" placeholder="أدخل الـ Refresh Token">
+              </div>
+              <div class="field">
+                <label>مفتاح تفويض الـ Gemini API Key</label>
+                <input type="password" id="quick-gemini-key" placeholder="AI API Key...">
+              </div>
+            </div>
+            <button class="btn btn-primary" id="save-quick-config-btn" style="padding: 10px 20px;">💾 حفظ وتثبيت المعطيات</button>
+          </div>
+
+          <!-- جدول ميموري لمتابعة آخر المقالات والمسودات المحدثة محلياً -->
+          <div class="config-card">
+            <h3 style="margin-top:0; margin-bottom:10px; font-size:16px;">⏱️ ذاكرة المحرك الحالية (Dashboard Memory)</h3>
+            <div id="dashboard-recent-posts-container" class="muted" style="font-size:13px;">
+              لا توجد مقالات منشورة أو مسودات محفوظة حالياً في كاش اللوحة.
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== [2] واجهة إدارة المقالات (Posts) ===================== -->
+        <section class="view" id="view-posts">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <div>
+              <h2>المقالات والمسودات المكتشفة</h2>
+              <p class="muted">إدارة وحذف وتعديل المقالات المحفوظة</p>
+            </div>
+            <button class="btn btn-primary" onclick="App.navigate('newpost')">+ مقال جديد</button>
+          </div>
+          <div id="posts-list-wrapper" class="glass" style="padding:20px; border-radius:var(--radius-md);">
+            <!-- تُحقن عناصر المقالات ديناميكياً من ui.js -->
+          </div>
+        </section>
+
+        <!-- ===================== [3] واجهة معالج المقالات المطور (New Post Wizard) ===================== -->
+        <section class="view" id="view-newpost">
+          <div style="margin-bottom:20px;">
+            <h2>صناعة ومعالجة مقال احترافي جديد</h2>
+            <p class="muted">حفظ تلقائي للمسودات مفعّل صامتاً ⚡</p>
+          </div>
+
+          <!-- الخطوة الأولى: توليد معطيات التطبيق تلقائياً من ذكاء جيرمي -->
+          <div class="wizard-step">
+            <h3 style="margin-top:0;"><i class="fa-solid fa-wand-magic-sparkles"></i> 1. الاستخراج الذكي من Gemini</h3>
+            <div class="field" style="max-width:500px;">
+              <label>أدخل اسم التطبيق المراد البحث عنه ونشره</label>
+              <div style="display:flex; gap:10px;">
+                <input type="text" id="wizard-target-app-name" placeholder="مثال: MT Manager , ZArchiver">
+                <button class="btn btn-primary" id="gemini-fetch-trigger" style="white-space:nowrap;">✨ جلب المواصفات</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- الخطوة الثانية: تخصيص واستخراج روابط التحميل المباشرة والوسيلة -->
+          <div class="wizard-step">
+            <h3><i class="fa-solid fa-link"></i> 2. استراتيجية وسيلة التحميل والروابط المباشرة</h3>
+            <div class="dashboard-meta-grid">
+              <div class="field">
+                <label>تحديد وسيلة التحميل داخل التدوينة</label>
+                <select id="wizard-download-strategy" style="width:100%; padding:10px; border-radius:var(--radius-sm); background:var(--glass-sub); color:var(--text-primary); border:1px solid var(--glass-border);">
+                  <option value="play_only">متجر Google Play فقط</option>
+                  <option value="hybrid" selected>متجر Google Play + رابط خارجي مصفى</option>
+                  <option value="external_only">رابط خارجي مباشر فقط (تطبيقات حرة/معدلة)</option>
+                </select>
+              </div>
+              <div class="field" id="external-link-field-wrapper">
+                <label>رابط التحميل المخصص (MediaFire / GitHub / Google Drive)</label>
+                <input type="url" id="wizard-raw-download-url" placeholder="انسخ الصق الرابط هنا...">
+                <span class="direct-link-indicator" id="direct-extractor-status" style="display:none;">✓ سيتم استخراج وتوليد الرابط المباشر للملف فورياً تلقائياً</span>
+              </div>
+              <div class="field" id="google-play-field-wrapper">
+                <label>معرف حزمة المتجر الرسمية (Package ID) - اختياري</label>
+                <input type="text" id="wizard-play-package-id" placeholder="مثال: com.mt.manager">
+              </div>
+            </div>
+          </div>
+
+          <!-- الخطوة الثالثة: مراجعة الحقول وتدقيق البيانات المستخرجة -->
+          <div class="wizard-step">
+            <h3><i class="fa-solid fa-list-check"></i> 3. تدقيق تفاصيل مصفوفة التطبيق الفنية</h3>
+            <div class="dashboard-meta-grid">
+              <div class="field"><label>رابط أيقونة التطبيق</label><input type="text" id="app-field-icon"></div>
+              <div class="field"><label>اسم المطور</label><input type="text" id="app-field-dev"></div>
+              <div class="field"><label>إصدار التطبيق</label><input type="text" id="app-field-version"></div>
+              <div class="field"><label>حجم الملف</label><input type="text" id="app-field-size"></div>
+              <div class="field"><label>التوافقية وأدنى نظام</label><input type="text" id="app-field-android"></div>
+              <div class="field"><label>تاريخ آخر تحديث للملف</label><input type="text" id="app-field-update"></div>
+              <div class="field"><label>نوع الترخيص</label><input type="text" id="app-field-license" value="مجاني / Free"></div>
+              <div class="field"><label>عدد مرات التحميل التقريبية</label><input type="text" id="app-field-downloads" value="+10,000"></div>
+            </div>
+            
+            <div class="field" style="margin-top:12px;">
+              <label>روابط لقطات الشاشة المعاينة (مفصولة بفاصلة ,)</label>
+              <input type="text" id="app-field-screenshots" placeholder="url1 , url2 , url3">
+            </div>
+
+            <div class="field" style="margin-top:12px;">
+              <label>الوصف والمراجعة الحصرية الشاملة (HTML)</label>
+              <textarea id="app-field-description" rows="8" style="width:100%; border-radius:var(--radius-sm); background:var(--glass-sub); color:var(--text-primary); border:1px solid var(--glass-border); padding:12px; font-family:inherit;"></textarea>
+            </div>
+            
+            <div class="field" style="margin-top:12px; max-width:400px;">
+              <label>التصنيفات والوسوم (Labels مفصولة بفاصلة)</label>
+              <input type="text" id="app-field-tags" placeholder="تطبيقات, أدوات, حماية">
+            </div>
+          </div>
+
+          <!-- أزرار الإجراءات النهائية والمعاينة والسيو الحية للتدوينة -->
+          <div style="display:flex; gap:12px; margin-top:20px;">
+            <button class="btn btn-primary" id="blogger-publish-trigger" style="padding:12px 28px;">🚀 نشر فوري للمقال حياً</button>
+            <button class="btn btn-ghost" id="seo-preview-trigger" style="padding:12px 24px; border:1px solid var(--glass-border);">👁️ معاينة شكل المشاركة المطور</button>
+          </div>
+        </section>
+
+        <!-- ===================== [4] واجهة المشاريع (Projects) ===================== -->
+        <section class="view" id="view-projects">
+          <div style="margin-bottom:20px;">
+            <h2>إدارة وعزل المشاريع</h2>
+            <p class="muted">تبديل وبناء مساحات تخزين منفصلة لكل مدونة مستقلة</p>
+          </div>
+          <div class="config-card">
+            <!-- تُحقن عناصر المشاريع ديناميكياً من projects.js -->
+            <p>ميزة بناء كتل المشاريع المتعددة قيد العمل والانسيابية.</p>
+          </div>
+        </section>
+
+        <!-- ===================== [5] واجهة الإعدادات المفصلة (Settings) ===================== -->
+        <section class="view" id="view-settings">
+          <div style="margin-bottom:20px;">
+            <h2>الإعدادات المفصلة للنظام</h2>
+            <p class="muted">التحكم الدقيق في معايير تشفير وفك تشفير الجلسات المحلية</p>
+          </div>
+          <div class="config-card">
+            <p>تتم إدارة كافة البيانات بمرونة تامة عبر كاش المتصفح الآمن والمباشر بدون تشفير معقد.</p>
+          </div>
+        </section>
+
       </div>
     </div>
   </div>
 
-  <!-- ===================== Shared overlays ===================== -->
+  <!-- ===================== Shared overlays & Modals ===================== -->
   <div id="toast-stack"></div>
 
-  <div id="loading-overlay">
+  <div id="loading-overlay" class="hidden">
     <div class="spinner"></div>
-    <div class="loading-text">جارِ التحميل...</div>
+    <div class="loading-text" id="loading-overlay-text">جارِ التحميل واستخراج الحقائق التقنية...</div>
   </div>
 
+  <!-- الـ Backdrop المخصص لعرض نافذة "المعاينة الحية للمقال" المطور القائم على التصميم الجديد -->
   <div class="modal-backdrop" id="modal-backdrop">
-    <div class="modal glass"></div>
+    <div class="modal glass" id="modal-content-area" style="max-width:960px; width:90%; max-height:85vh; overflow-y:auto; border-radius:var(--radius-lg); padding:10px;">
+      <!-- يُحقن كود الـ Premium Template للمعاينة هنا ديناميكياً عند الضغط على زر المعاينة -->
+    </div>
   </div>
 
-  <!-- ===================== Modules ===================== -->
+  <!-- ===================== JS Modules ===================== -->
   <script src="js/ui.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/blogger.js"></script>
