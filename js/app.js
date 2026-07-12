@@ -1,5 +1,5 @@
 /**
- * app.js (LocalStorage Edition)
+ * app.js (LocalStorage Edition - Cleaned)
  * Application entry point. Boots the UI, gates access behind the
  * password/lock screen, wires navigation between views, and contains
  * the view-specific rendering logic (dashboard stats, posts list +
@@ -23,7 +23,7 @@ const App = {
     this._bindNav();
     this._bindGlobalActions();
 
-    // الفحص المعدل: نتحقق الآن من المتصفح مباشرة بدلاً من عمل fetch لملف خارجي
+    // الفحص يعتمد على المتصفح مباشرة بدلاً من ملف خارجي
     const exists = Auth.isBootstrapped();
     document.getElementById('lock-mode-hint').textContent = exists
       ? 'أدخل كلمة المرور لفتح لوحة التحكم'
@@ -39,6 +39,7 @@ const App = {
     const form = document.getElementById('lock-form');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      
       const password = document.getElementById('lock-password').value;
       if (!password || password.length < 6) {
         UI.toast('كلمة المرور يجب ألا تقل عن 6 أحرف', 'error');
