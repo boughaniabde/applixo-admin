@@ -169,13 +169,22 @@ const App = {
     const el = document.getElementById('view-dashboard');
     if (!el) return;
     
-    const c = (typeof Auth !== 'undefined' && Auth.config) ? Auth.config : {};
+    // تأمين جلب الـ Config حتى لو لم يقم ملف auth.js بتهيئته بالكامل بعد
+    let c = {};
+    if (typeof Auth !== 'undefined' && Auth.config) {
+      c = Auth.config;
+    } else {
+      try {
+        const localData = localStorage.getItem('b_config') || localStorage.getItem('app_secrets');
+        if (localData) c = JSON.parse(localData);
+      } catch(e) {}
+    }
 
     el.innerHTML = `
       <div class="page-head"><div><h1>لوحة المعلومات</h1><p>نظرة عامة على مدونتك ومشاريعك</p></div></div>
       <div class="grid grid-4" id="dash-stats">${UI.skeletonRows(4, 96)}</div>
       
-      <!-- [ميزة جديدة] لوحة إدارة وتعديل كافة المعطيات مباشرة وحياً من صفحة الرئيسية -->
+      <!-- لوحة إدارة وتعديل كافة المعطيات مباشرة وحياً من صفحة الرئيسية -->
       <div class="panel glass" style="margin-top:18px; padding:20px;">
         <div class="panel-head" style="margin-bottom:15px;">
           <h3>⚙️ إدارة وتعديل كافة معطيات المحرك والمفاتيح</h3>
@@ -202,21 +211,40 @@ const App = {
         <div id="dash-recent">${UI.skeletonRows(4, 64)}</div>
       </div>`;
 
-    // ربط ميكانيكية الحفظ السريع داخل الرئيسية
+    // ربط ميكانيكية الحفظ السريع وتفادي فخ أخطاء عدم تهيئة الجلسة
     document.getElementById('save-quick-settings-btn')?.addEventListener('click', async () => {
-      if (typeof Auth === 'undefined' || !Auth.config) return;
-      Object.assign(Auth.config, {
+      const updatedSecrets = {
         blogId: document.getElementById('quick-blogId').value.trim(),
         clientId: document.getElementById('quick-clientId').value.trim(),
         clientSecret: document.getElementById('quick-clientSecret').value.trim(),
         refreshToken: document.getElementById('quick-refreshToken').value.trim(),
         imgbbApiKey: document.getElementById('quick-imgbb').value.trim(),
         geminiApiKey: document.getElementById('quick-gemini').value.trim(),
-      });
+      };
+
+      if (typeof Auth !== 'undefined') {
+        if (!Auth.config) Auth.config = {};
+        Object.assign(Auth.config, updatedSecrets);
+      }
+
       try {
         UI.showLoading('جارِ حفظ وتثبيت البيانات...');
-        await Auth.persistConfig('');
-        UI.toast('تم تحديث كافة المعطيات وحفظها بنجاح!', 'success');
+        
+        // إذا كان التطبيق يستخدم دالة persistConfig نستخدمها، وإلا نحقنها في الـ localStorage فوراً لضمان عدم الضياع
+        if (typeof Auth !== 'undefined' && Auth.persistConfig) {
+          await Auth.persistConfig('');
+        } else {
+          localStorage.setItem('b_config', JSON.stringify(updatedSecrets));
+          localStorage.setItem('app_secrets', JSON.stringify(updatedSecrets));
+        }
+
+        UI.toast('تم تحديث كافة المعطيات وحفظ الجلسة بنجاح!', 'success');
+        
+        // تجديد التوكن لربط الجلسة حياً بعد التحديث مباشرة
+        if (typeof Auth !== 'undefined' && Auth.getAccessToken) {
+          try { await Auth.getAccessToken(); } catch(e) {}
+        }
+
         this.renderDashboard();
       } catch (err) {
         UI.toast(err.message, 'error');
@@ -239,7 +267,9 @@ const App = {
       document.getElementById('dash-recent').innerHTML = items.map((p) => this._postRowHTML(p)).join('') || '<p class="muted">لا توجد مقالات بعد.</p>';
       this._bindPostRowActions(document.getElementById('dash-recent'));
     } catch (err) {
-      UI.toast(err.message, 'error');
+      // تفادي إزعاج المستخدم بـ Toasts إذا لم تكن الإعدادات مكتملة عند أول تشغيل باللوحة
+      const recentEl = document.getElementById('dash-recent');
+      if(recentEl) recentEl.innerHTML = `<p class="muted">يرجى ملء معطيات الاتصال بالخلفية لفتح المزامنة التلقائية.</p>`;
     }
   },
 
@@ -395,7 +425,6 @@ const App = {
   _wizardStep1() {
     const d = this.state.wizardData;
     return `
-      <!-- [ميزة جديدة] دمج زر التوليد الذكي عبر Gemini بداخل حقل إدخال اسم التطبيق -->
       <div class="field">
         <label>اسم التطبيق</label>
         <div style="display: flex; gap: 8px; width: 100%;">
@@ -467,11 +496,20 @@ const App = {
   },
 
   _bindWizardStep(step) {
-    // ربط آلية التوليد التلقائي عبر Gemini داخل الخطوة الأولى
     if (step === 1) {
       document.getElementById('w-gemini-btn')?.addEventListener('click', async () => {
         const appName = document.getElementById('w-name').value.trim();
-        const apiKey = (typeof Auth !== 'undefined' && Auth.config) ? Auth.config.geminiApiKey : '';
+        
+        // جلب المفتاح بشكل آمن ومباشر من أي مصدر تخزيني متاح لتجنب خطأ الجلسة الفارغة
+        let apiKey = '';
+        if (typeof Auth !== 'undefined' && Auth.config && Auth.config.geminiApiKey) {
+          apiKey = Auth.config.geminiApiKey;
+        } else {
+          try {
+            const lData = JSON.parse(localStorage.getItem('b_config') || localStorage.getItem('app_secrets'));
+            apiKey = lData?.geminiApiKey || '';
+          } catch(e) {}
+        }
 
         if (!appName) {
           UI.toast('يرجى إدخال اسم التطبيق أولاً!', 'error');
@@ -491,7 +529,7 @@ const App = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: `أنت مساعد وخبير سيو متخصص في تطبيقات أندرويد. قم باستخراج وإنشاء بيانات تطبيق "${appName}" بصيغة JSON كالتالي تماماً وبدون أي نصوص برمجية أخرى خارج القوسين: {"developer": "اسم المطور", "description": "وصف ومراجعة شاملة واحترافية جداً ومغرية للتحميل ومتوافقة تماماً مع شروط سيو جوجل للمقالات لتبدو كاتب محترف"، "version": "رقم آخر إصدار تخيلي مستقر"، "size": "حجم التطبيق التقريبي ميغابايت"، "android": "أقل نسخة أندرويد يتطلبها التطبيق مثل 6.0+"}. اكتب الوصف باللغة العربية الفصحى.` }] }]
+              contents: [{ parts: [{ text: `أنت مساعد وخبير سيو متخصص في تطبيقات أندرويد. قم باستخراج وإنشاء بيانات تطبيق "${appName}" بصيغة JSON كالتالي تماماً وبدون أي نصوص برمجية أخرى خارج القوسين: {"developer": "اسم المطور", "description": "وصف ومراجعة شاملة واحترافية جداً ومغرية للتحميل ومتوافقة تماماً مع شروط سيو جوجل للمقالات لتبدو كاتب محترف"، "version": "رقم آخر إصدار تخيلي مستقر Bryan"، "size": "حجم التطبيق التقريبي ميغابايت", "android": "أقل نسخة أندرويد يتطلبها التطبيق مثل 6.0+"}. اكتب الوصف باللغة العربية الفصحى.` }] }]
             })
           });
 
@@ -499,11 +537,9 @@ const App = {
           const rawText = resData.candidates[0].content.parts[0].text;
           const cleanJson = JSON.parse(rawText.replace(/```json|```/g, '').trim());
 
-          // ملء الحقول في الواجهة الحالية
           if (document.getElementById('w-developer')) document.getElementById('w-developer').value = cleanJson.developer || '';
           if (document.getElementById('w-description')) document.getElementById('w-description').value = cleanJson.description || '';
           
-          // حفظ القيم الإضافية مؤقتاً لحقنها تلقائياً في الخطوة الثانية
           this.state.wizardData.version = cleanJson.version || '';
           this.state.wizardData.size = cleanJson.size || '';
           this.state.wizardData.android = cleanJson.android || '';
@@ -756,7 +792,6 @@ const App = {
       });
       try {
         UI.showLoading('جارِ الحفظ...');
-        // نمرر قيمة فارغة لحفظها بدون تشفير معقد يعتمد على كلمة مرور
         await Auth.persistConfig('');
         UI.toast('تم تحديث الإعدادات داخل الـ LocalStorage بنجاح', 'success');
       } catch (err) {
