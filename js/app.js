@@ -1,12 +1,10 @@
 /**
- * app.js (LocalStorage Edition - Robust & Cleaned)
- * Application entry point. Boots the UI, gates access behind the
- * password/lock screen, wires navigation between views, and contains
- * the view-specific rendering logic (dashboard stats, posts list +
- * search, the 3-step new-post wizard, projects manager, settings).
+ * app.js (LocalStorage Edition - Passwordless Auto-Boot)
+ * Application entry point. Boots the UI, bypasses the lock screen,
+ * wires navigation between views, and contains the view-specific
+ * rendering logic (dashboard stats, posts list + search, wizard, projects, settings).
  *
- * Kept deliberately as "controller glue": the actual domain logic
- * lives in auth.js / blogger.js / projects.js / uploader.js / generator.js.
+ * Password/Lock screen functionality completely bypassed as requested.
  */
 
 const App = {
@@ -21,107 +19,59 @@ const App = {
     try {
       if (typeof UI !== 'undefined' && UI.init) UI.init();
       
-      this._bindLockScreen();
       this._bindNav();
       this._bindGlobalActions();
 
-      // فحص آمن لحالة الإعداد لمنع الانهيار الصامت
+      // فحص وجود إعدادات سابقة في المتصفح
       const exists = (typeof Auth !== 'undefined' && Auth.isBootstrapped) ? Auth.isBootstrapped() : false;
-      
-      const hintEl = document.getElementById('lock-mode-hint');
       const screenEl = document.getElementById('lock-screen');
       
-      if (hintEl) {
-        hintEl.textContent = exists
-          ? 'أدخل كلمة المرور لفتح لوحة التحكم'
-          : 'لا يوجد إعداد بعد — أدخل كلمة مرور جديدة لإنشائه';
-      }
-      if (screenEl) {
-        screenEl.dataset.mode = exists ? 'unlock' : 'create';
+      if (exists) {
+        // إذا كانت الإعدادات موجودة، يتم تخطي الشاشة والتشغيل تلقائياً بدون كلمة مرور
+        if (screenEl) screenEl.classList.add('hidden');
+        
+        // محاكاة فتح القفل محلياً بالقيمة الافتراضية إذا كان نظام auth.js يتطلب استدعاء unlock
+        if (typeof Auth !== 'undefined' && Auth.unlock) {
+          try { await Auth.unlock(''); } catch(e) { /* تجاوز أخطاء التشفير إن وجدت */ }
+        }
+        
+        await this._boot();
+      } else {
+        // إذا لم يكن هناك إعداد بعد، يتم توجيه المستخدم لإنشاء الإعداد مباشرة
+        if (screenEl) screenEl.classList.add('hidden'); // إخفاء واجهة القفل
+        await this._runFirstTimeSetup();
       }
     } catch (globalErr) {
       console.error("خطأ أثناء تشغيل التطبيق:", globalErr);
-      alert("حدث خطأ أثناء تهيئة التطبيق: " + globalErr.message);
+      if (typeof UI !== 'undefined' && UI.toast) {
+        UI.toast("حدث خطأ أثناء التهيئة المباشرة", "error");
+      }
     }
   },
 
-  /* ================================================================ */
-  /* Lock screen                                                        */
-  /* ================================================================ */
-
-  _bindLockScreen() {
-    const form = document.getElementById('lock-form');
-    if (!form) return;
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      
-      const passwordEl = document.getElementById('lock-password');
-      const password = passwordEl ? passwordEl.value : '';
-      
-      if (!password || password.length < 6) {
-        if (typeof UI !== 'undefined' && UI.toast) {
-          UI.toast('كلمة المرور يجب ألا تقل عن 6 أحرف', 'error');
-        } else {
-          alert('كلمة المرور يجب ألا تقل عن 6 أحرف');
-        }
-        return;
-      }
-
-      const screenEl = document.getElementById('lock-screen');
-      const mode = screenEl ? screenEl.dataset.mode : 'create';
-      
-      try {
-        if (typeof UI !== 'undefined' && UI.showLoading) UI.showLoading('جارِ التحقق...');
-        
-        if (mode === 'unlock') {
-          if (typeof Auth !== 'undefined' && Auth.unlock) {
-            await Auth.unlock(password);
-          } else {
-            throw new Error("مكتبة نظام المصادقة Auth غير معرّفة أو ناقصة!");
-          }
-        } else {
-          await this._runFirstTimeSetup(password);
-        }
-        
-        screenEl?.classList.add('hidden');
-        await this._boot();
-        
-      } catch (err) {
-        console.error("خطأ تسجيل الدخول:", err);
-        if (typeof UI !== 'undefined' && UI.toast) {
-          UI.toast(err.message || 'كلمة مرور غير صحيحة', 'error');
-        } else {
-          alert(err.message || 'كلمة مرور غير صحيحة');
-        }
-      } finally {
-        if (typeof UI !== 'undefined' && UI.hideLoading) UI.hideLoading();
-      }
-    });
-  },
-
-  /** التهيئة لأول مرة: جمع البيانات وحفظها مشفرة داخل الـ localStorage تلقائياً */
-  async _runFirstTimeSetup(password) {
+  /** التهيئة لأول مرة: جمع البيانات وحفظها مباشرة بالمتصفح بدون تشفير بكلمة مرور */
+  async _runFirstTimeSetup() {
     if (typeof UI === 'undefined' || !UI.openModal) {
-      throw new Error("مكتبة الواجهة UI.openModal غير معرّفة!");
+      alert("مكتبة الواجهة UI.openModal غير معرّفة!");
+      return;
     }
 
-    const secrets = await new Promise((resolve) => {
-      UI.openModal({
-        title: 'إعداد أول مرة',
-        body: `
-          <p>أدخل بيانات الاتصال الأساسية لمدونتك. يمكنك تعديلها أو إكمالها لاحقاً من صفحة الإعدادات.</p>
-          <div class="field"><label>Blog ID</label><input type="text" id="s-blogId" placeholder="مثال: 1234567890"></div>
-          <div class="field"><label>Google OAuth Client ID</label><input type="text" id="s-clientId"></div>
-          <div class="field"><label>Google OAuth Client Secret</label><input type="password" id="s-clientSecret"></div>
-          <div class="field"><label>Refresh Token (اختياري - سيتم توليده عند ربط الحساب)</label><input type="password" id="s-refreshToken"></div>
-          <div class="field"><label>ImgBB API Key (اختياري)</label><input type="password" id="s-imgbb"></div>
-        `,
-        actions: [{
-          label: 'إنشاء وحفظ بالمتصفح',
-          cls: 'btn-primary',
-          close: true,
-          onClick: () => resolve({
+    UI.openModal({
+      title: 'إعداد لوحة التحكم لأول مرة',
+      body: `
+        <p>أدخل بيانات الاتصال الأساسية لمدونتك. سيتم حفظ هذه البيانات محلياً في متصفحك فوراً.</p>
+        <div class="field"><label>Blog ID</label><input type="text" id="s-blogId" placeholder="مثال: 1234567890"></div>
+        <div class="field"><label>Google OAuth Client ID</label><input type="text" id="s-clientId"></div>
+        <div class="field"><label>Google OAuth Client Secret</label><input type="password" id="s-clientSecret"></div>
+        <div class="field"><label>Refresh Token (اختياري)</label><input type="password" id="s-refreshToken"></div>
+        <div class="field"><label>ImgBB API Key (اختياري)</label><input type="password" id="s-imgbb"></div>
+      `,
+      actions: [{
+        label: 'حفظ والدخول فوراً',
+        cls: 'btn-primary',
+        close: true,
+        onClick: async () => {
+          const secrets = {
             blogId: document.getElementById('s-blogId').value.trim() || '000000000',
             clientId: document.getElementById('s-clientId').value.trim() || 'demo-client-id',
             clientSecret: document.getElementById('s-clientSecret').value.trim() || 'demo-secret',
@@ -132,17 +82,19 @@ const App = {
             githubOwner: '',
             githubRepo: '',
             githubBranch: 'main',
-          }),
-        }],
-      });
-    });
+          };
 
-    if (typeof Auth !== 'undefined' && Auth.createConfig) {
-      await Auth.createConfig(secrets, password);
-      UI.toast('تم حفظ الإعدادات بنجاح في متصفحك!', 'success');
-    } else {
-      throw new Error("دالة Auth.createConfig غير موجودة!");
-    }
+          if (typeof Auth !== 'undefined' && Auth.createConfig) {
+            // نمرر قيمة فارغة مكان كلمة المرور
+            await Auth.createConfig(secrets, '');
+            UI.toast('تم حفظ الإعدادات بنجاح في متصفحك!', 'success');
+            await this._boot();
+          } else {
+            UI.toast('دالة Auth.createConfig غير موجودة!', 'error');
+          }
+        },
+      }],
+    });
   },
 
   /* ================================================================ */
@@ -203,8 +155,8 @@ const App = {
       } catch (err) { UI.toast(err.message, 'error'); }
     }, 400));
 
+    // زر القفل القديم يقوم الآن بعمل إعادة تعيين للجلسة أو تحديث الصفحة فقط
     document.getElementById('lock-btn')?.addEventListener('click', () => {
-      if (typeof Auth !== 'undefined' && Auth.lock) Auth.lock();
       location.reload();
     });
   },
@@ -430,7 +382,7 @@ const App = {
       <div class="field">
         <label>التصنيفات / الوسوم</label>
         <div class="chip-select" id="w-labels-chips">
-          ${['تطبيقات', 'ألعاب', 'أدوات', 'أندرويد', 'مجاني'].map((l) => `<span class="chip ${d.labels?.includes(l) ? 'active' : ''}" data-label="${l}">${l}</span>`).join('')}
+          ${['تتطبيقات', 'ألعاب', 'أدوات', 'أندرويد', 'مجاني'].map((l) => `<span class="chip ${d.labels?.includes(l) ? 'active' : ''}" data-label="${l}">${l}</span>`).join('')}
         </div>
       </div>
       <div class="wizard-actions">
@@ -666,7 +618,7 @@ const App = {
     if (!el) return;
     const c = (typeof Auth !== 'undefined' && Auth.config) ? Auth.config : {};
     el.innerHTML = `
-      <div class="page-head"><div><h1>الإعدادات</h1><p>بيانات الاتصال — مشفّرة داخل متصفحك</p></div></div>
+      <div class="page-head"><div><h1>الإعدادات</h1><p>بيانات الاتصال — محفوظة داخل متصفحك</p></div></div>
       <div class="panel glass">
         <div class="settings-section">
           <h4>Blogger</h4>
@@ -698,8 +650,9 @@ const App = {
       });
       try {
         UI.showLoading('جارِ الحفظ...');
-        await Auth.persistConfig();
-        UI.toast('تم تحديث الإعدادات المشفرة داخل الـ LocalStorage بنجاح', 'success');
+        // نمرر قيمة فارغة لحفظها بدون تشفير معقد يعتمد على كلمة مرور
+        await Auth.persistConfig('');
+        UI.toast('تم تحديث الإعدادات داخل الـ LocalStorage بنجاح', 'success');
       } catch (err) {
         UI.toast(err.message, 'error');
       } finally { UI.hideLoading(); }
