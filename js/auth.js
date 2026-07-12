@@ -1,24 +1,14 @@
 /**
- * auth.js (LocalStorage Edition)
+ * auth.js (LocalStorage Edition - Passwordless Fix)
  * ------------------------------------------------------------------
  * Handles everything related to secrets and identity:
- *
- *  1. AES-256-GCM encryption/decryption of config data inside localStorage
- *     (Blog ID, OAuth client id/secret, refresh token, ImgBB key, Gemini key)
- *     using a password the user types once per session.
- *     The password itself is never stored anywhere.
- *
- *  2. Google OAuth access-token retrieval via the refresh_token grant,
- *     plus the "Refresh Token expired" recovery dialog.
- *
- *  3. 100% Static Friendly: No GitHub API commits needed to store secrets anymore.
- *     Everything stays securely encrypted inside your browser's local storage.
+ * Fixed to allow blank passwords for absolute passwordless local auto-boot.
  */
 
 class AuthController {
   constructor() {
     this.config = null;         // decrypted secrets, memory-only
-    this.password = null;       // memory-only, cleared on lock/reload
+    this.password = "";         // default to empty string for passwordless bypass
     this.accessToken = null;
     this.accessTokenExpiry = 0;
   }
@@ -29,7 +19,9 @@ class AuthController {
 
   async _deriveKey(password, saltBytes) {
     const enc = new TextEncoder();
-    const baseKey = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    // Use fallback string if password is empty to prevent crypto failures
+    const pwdString = password || "boughani_default_salt_secure_bypass_key";
+    const baseKey = await crypto.subtle.importKey('raw', enc.encode(pwdString), 'PBKDF2', false, ['deriveKey']);
     return crypto.subtle.deriveKey(
       { name: 'PBKDF2', salt: saltBytes, iterations: 150000, hash: 'SHA-256' },
       baseKey,
@@ -74,53 +66,47 @@ class AuthController {
   /* LocalStorage Bootstrapping & Unlocking                           */
   /* ================================================================ */
 
-  /** True once config has been loaded & decrypted this session. */
   isUnlocked() {
     return !!this.config;
   }
 
-  /** Checks if the dashboard has already been initialized in this browser. */
   isBootstrapped() {
     return !!localStorage.getItem('blogger_control_config');
   }
 
-  /**
-   * Attempts to retrieve encrypted payload from localStorage and decrypt it.
-   * Throws an error if no setup exists or password is wrong.
-   */
   async unlock(password) {
     const encryptedData = localStorage.getItem('blogger_control_config');
     if (!encryptedData) throw new Error('لم يتم العثور على أي إعدادات مخزنة — أنشئ الإعدادات أولاً.');
     
     const payload = JSON.parse(encryptedData);
-    const config = await this.decryptObject(payload, password); // Throws if password is wrong
+    // Try decrypting with given password or fallback empty string
+    const targetPassword = typeof password === 'string' ? password : "";
+    const config = await this.decryptObject(payload, targetPassword);
     this.config = config;
-    this.password = password;
+    this.password = targetPassword;
     return config;
   }
 
-  /**
-   * First-run path: Encrypts the given secrets object and stores it directly
-   * in the browser's localStorage.
-   */
   async createConfig(secrets, password) {
-    const payload = await this.encryptObject(secrets, password);
+    const targetPassword = typeof password === 'string' ? password : "";
+    const payload = await this.encryptObject(secrets, targetPassword);
     localStorage.setItem('blogger_control_config', JSON.stringify(payload));
     this.config = secrets;
-    this.password = password;
+    this.password = targetPassword;
     return payload;
   }
 
-  /** Re-encrypts current in-memory config and updates localStorage. */
+  /** FIXED: Removed the strict check that crashed on empty string password */
   async persistConfig() {
-    if (!this.config || !this.password) throw new Error('لا توجد جلسة مفتوحة.');
-    const payload = await this.encryptObject(this.config, this.password);
+    if (!this.config) throw new Error('لا توجد جلسة مفتوحة للبيانات.');
+    const targetPassword = typeof this.password === 'string' ? this.password : "";
+    const payload = await this.encryptObject(this.config, targetPassword);
     localStorage.setItem('blogger_control_config', JSON.stringify(payload));
   }
 
   lock() {
     this.config = null;
-    this.password = null;
+    this.password = "";
     this.accessToken = null;
     this.accessTokenExpiry = 0;
   }
@@ -133,7 +119,6 @@ class AuthController {
     return 'https://www.googleapis.com/auth/blogger';
   }
 
-  /** Builds the consent-screen URL for the "Generate OAuth Link" button. */
   buildAuthUrl() {
     const { clientId } = this.config;
     const params = new URLSearchParams({
@@ -147,7 +132,6 @@ class AuthController {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 
-  /** Exchanges a fresh authorization code for a brand-new refresh_token. */
   async exchangeAuthCode(code) {
     const { clientId, clientSecret } = this.config;
     const body = new URLSearchParams({
@@ -171,12 +155,21 @@ class AuthController {
     return data;
   }
 
-  /** Returns a valid access token, refreshing it if expired. */
   async getAccessToken() {
     if (this.accessToken && Date.now() < this.accessTokenExpiry) return this.accessToken;
 
+    if (!this.config) {
+      // Auto restore config from localStorage if available to bypass session dropouts
+      const rawData = localStorage.getItem('blogger_control_config');
+      if (rawData) {
+        try { await this.unlock(""); } catch(e) { throw new Error('لم يتم تهيئة الجلسة بشكل صحيح.'); }
+      } else {
+        throw new Error('لم يتم العثور على إعدادات اتصال نشطة.');
+      }
+    }
+
     const { clientId, clientSecret, refreshToken } = this.config;
-    if (!refreshToken) return this._recoverExpiredToken(); // If no token exists yet, trigger recovery
+    if (!refreshToken) return this._recoverExpiredToken();
 
     const body = new URLSearchParams({
       client_id: clientId,
@@ -213,7 +206,6 @@ class AuthController {
     return this.accessToken;
   }
 
-  /** Shows the "Refresh Token expired" or missing dialog. */
   _recoverExpiredToken() {
     return new Promise((resolve, reject) => {
       const authUrl = this.buildAuthUrl();
@@ -250,10 +242,10 @@ class AuthController {
           },
         ],
       });
-      modal.querySelector('#oauth-code-input')?.focus();
+      const inputEl = document.getElementById('oauth-code-input');
+      if (inputEl) inputEl.focus();
     });
   }
 }
 
-// Instantiate the singleton
 const Auth = new AuthController();
