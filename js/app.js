@@ -1,5 +1,5 @@
 /**
- * app.js (LocalStorage Edition - Cleaned)
+ * app.js (LocalStorage Edition - Robust & Cleaned)
  * Application entry point. Boots the UI, gates access behind the
  * password/lock screen, wires navigation between views, and contains
  * the view-specific rendering logic (dashboard stats, posts list +
@@ -18,17 +18,31 @@ const App = {
   },
 
   async init() {
-    UI.init();
-    this._bindLockScreen();
-    this._bindNav();
-    this._bindGlobalActions();
+    try {
+      if (typeof UI !== 'undefined' && UI.init) UI.init();
+      
+      this._bindLockScreen();
+      this._bindNav();
+      this._bindGlobalActions();
 
-    // الفحص يعتمد على المتصفح مباشرة بدلاً من ملف خارجي
-    const exists = Auth.isBootstrapped();
-    document.getElementById('lock-mode-hint').textContent = exists
-      ? 'أدخل كلمة المرور لفتح لوحة التحكم'
-      : 'لا يوجد إعداد بعد — أدخل كلمة مرور جديدة لإنشائه';
-    document.getElementById('lock-screen').dataset.mode = exists ? 'unlock' : 'create';
+      // فحص آمن لحالة الإعداد لمنع الانهيار الصامت
+      const exists = (typeof Auth !== 'undefined' && Auth.isBootstrapped) ? Auth.isBootstrapped() : false;
+      
+      const hintEl = document.getElementById('lock-mode-hint');
+      const screenEl = document.getElementById('lock-screen');
+      
+      if (hintEl) {
+        hintEl.textContent = exists
+          ? 'أدخل كلمة المرور لفتح لوحة التحكم'
+          : 'لا يوجد إعداد بعد — أدخل كلمة مرور جديدة لإنشائه';
+      }
+      if (screenEl) {
+        screenEl.dataset.mode = exists ? 'unlock' : 'create';
+      }
+    } catch (globalErr) {
+      console.error("خطأ أثناء تشغيل التطبيق:", globalErr);
+      alert("حدث خطأ أثناء تهيئة التطبيق: " + globalErr.message);
+    }
   },
 
   /* ================================================================ */
@@ -37,34 +51,61 @@ const App = {
 
   _bindLockScreen() {
     const form = document.getElementById('lock-form');
+    if (!form) return;
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       
-      const password = document.getElementById('lock-password').value;
+      const passwordEl = document.getElementById('lock-password');
+      const password = passwordEl ? passwordEl.value : '';
+      
       if (!password || password.length < 6) {
-        UI.toast('كلمة المرور يجب ألا تقل عن 6 أحرف', 'error');
+        if (typeof UI !== 'undefined' && UI.toast) {
+          UI.toast('كلمة المرور يجب ألا تقل عن 6 أحرف', 'error');
+        } else {
+          alert('كلمة المرور يجب ألا تقل عن 6 أحرف');
+        }
         return;
       }
-      const mode = document.getElementById('lock-screen').dataset.mode;
+
+      const screenEl = document.getElementById('lock-screen');
+      const mode = screenEl ? screenEl.dataset.mode : 'create';
+      
       try {
-        UI.showLoading('جارِ التحقق...');
+        if (typeof UI !== 'undefined' && UI.showLoading) UI.showLoading('جارِ التحقق...');
+        
         if (mode === 'unlock') {
-          await Auth.unlock(password);
+          if (typeof Auth !== 'undefined' && Auth.unlock) {
+            await Auth.unlock(password);
+          } else {
+            throw new Error("مكتبة نظام المصادقة Auth غير معرّفة أو ناقصة!");
+          }
         } else {
           await this._runFirstTimeSetup(password);
         }
-        document.getElementById('lock-screen').classList.add('hidden');
+        
+        screenEl?.classList.add('hidden');
         await this._boot();
+        
       } catch (err) {
-        UI.toast(err.message || 'كلمة مرور غير صحيحة', 'error');
+        console.error("خطأ تسجيل الدخول:", err);
+        if (typeof UI !== 'undefined' && UI.toast) {
+          UI.toast(err.message || 'كلمة مرور غير صحيحة', 'error');
+        } else {
+          alert(err.message || 'كلمة مرور غير صحيحة');
+        }
       } finally {
-        UI.hideLoading();
+        if (typeof UI !== 'undefined' && UI.hideLoading) UI.hideLoading();
       }
     });
   },
 
   /** التهيئة لأول مرة: جمع البيانات وحفظها مشفرة داخل الـ localStorage تلقائياً */
   async _runFirstTimeSetup(password) {
+    if (typeof UI === 'undefined' || !UI.openModal) {
+      throw new Error("مكتبة الواجهة UI.openModal غير معرّفة!");
+    }
+
     const secrets = await new Promise((resolve) => {
       UI.openModal({
         title: 'إعداد أول مرة',
@@ -96,9 +137,12 @@ const App = {
       });
     });
 
-    // الحفظ مباشرة في الـ LocalStorage
-    await Auth.createConfig(secrets, password);
-    UI.toast('تم حفظ الإعدادات بنجاح في متصفحك!', 'success');
+    if (typeof Auth !== 'undefined' && Auth.createConfig) {
+      await Auth.createConfig(secrets, password);
+      UI.toast('تم حفظ الإعدادات بنجاح في متصفحك!', 'success');
+    } else {
+      throw new Error("دالة Auth.createConfig غير موجودة!");
+    }
   },
 
   /* ================================================================ */
@@ -106,14 +150,20 @@ const App = {
   /* ================================================================ */
 
   async _boot() {
-    UI.setConnectionStatus('warn');
+    if (typeof UI !== 'undefined' && UI.setConnectionStatus) UI.setConnectionStatus('warn');
     try {
-      await Projects.load();
-      this._renderProjectSwitch();
-      await Auth.getAccessToken();
-      UI.setConnectionStatus('ok');
+      if (typeof Projects !== 'undefined' && Projects.load) {
+        await Projects.load();
+        this._renderProjectSwitch();
+      }
+      if (typeof Auth !== 'undefined' && Auth.getAccessToken) {
+        await Auth.getAccessToken();
+      }
+      if (typeof UI !== 'undefined' && UI.setConnectionStatus) UI.setConnectionStatus('ok');
     } catch (err) {
-      if (err.message !== 'cancelled') UI.toast(err.message, 'error');
+      if (err.message !== 'cancelled' && typeof UI !== 'undefined' && UI.toast) {
+        UI.toast(err.message, 'error');
+      }
     }
     this.navigate('dashboard');
   },
@@ -154,7 +204,7 @@ const App = {
     }, 400));
 
     document.getElementById('lock-btn')?.addEventListener('click', () => {
-      Auth.lock();
+      if (typeof Auth !== 'undefined' && Auth.lock) Auth.lock();
       location.reload();
     });
   },
@@ -165,6 +215,7 @@ const App = {
 
   async renderDashboard() {
     const el = document.getElementById('view-dashboard');
+    if (!el) return;
     el.innerHTML = `
       <div class="page-head"><div><h1>لوحة المعلومات</h1><p>نظرة عامة على مدونتك ومشاريعك</p></div></div>
       <div class="grid grid-4" id="dash-stats">${UI.skeletonRows(4, 96)}</div>
@@ -177,11 +228,14 @@ const App = {
       const res = await Blogger.getPosts({ maxResults: 6 });
       const items = res.items || [];
       const live = items.filter((p) => p.status !== 'DRAFT').length;
+      const projectsCount = (typeof Projects !== 'undefined' && Projects.list) ? Projects.list.length : 0;
+      const hasToken = (typeof Auth !== 'undefined' && Auth.accessToken) ? 'متصل' : 'غير متصل';
+
       document.getElementById('dash-stats').innerHTML = `
         ${this._statCard('إجمالي المقالات', res.items ? (res.items.length + '+') : '0', '📄')}
-        ${this._statCard('المشاريع', Projects.list.length, '🗂️')}
+        ${this._statCard('المشاريع', projectsCount, '🗂️')}
         ${this._statCard('المنشورة', live, '✅')}
-        ${this._statCard('حالة الاتصال', Auth.accessToken ? 'متصل' : 'غير متصل', '🔌')}
+        ${this._statCard('حالة الاتصال', hasToken, '🔌')}
       `;
       document.getElementById('dash-recent').innerHTML = items.map((p) => this._postRowHTML(p)).join('') || '<p class="muted">لا توجد مقالات بعد.</p>';
       this._bindPostRowActions(document.getElementById('dash-recent'));
@@ -200,6 +254,7 @@ const App = {
 
   async renderPosts() {
     const el = document.getElementById('view-posts');
+    if (!el) return;
     el.innerHTML = `
       <div class="page-head">
         <div><h1>المقالات</h1><p>إدارة، تعديل، وحذف مقالات المدونة</p></div>
@@ -214,7 +269,7 @@ const App = {
       this.state.nextPageToken = res.nextPageToken || null;
       this._renderPostList(this.state.posts);
       const moreBtn = document.getElementById('load-more-btn');
-      if (this.state.nextPageToken) {
+      if (this.state.nextPageToken && moreBtn) {
         moreBtn.classList.remove('hidden');
         moreBtn.onclick = async () => {
           const more = await Blogger.getPosts({ maxResults: 15, pageToken: this.state.nextPageToken });
@@ -225,7 +280,8 @@ const App = {
         };
       }
     } catch (err) {
-      document.getElementById('posts-list').innerHTML = `<p class="muted">${UI.escapeHTML(err.message)}</p>`;
+      const listEl = document.getElementById('posts-list');
+      if (listEl) listEl.innerHTML = `<p class="muted">${UI.escapeHTML(err.message)}</p>`;
     }
   },
 
@@ -314,12 +370,13 @@ const App = {
   renderWizard() {
     this.state.wizardStep = 1;
     this.state.wizardData = { labels: [] };
-    Uploader.reset();
+    if (typeof Uploader !== 'undefined' && Uploader.reset) Uploader.reset();
     this._paintWizard();
   },
 
   _paintWizard() {
     const el = document.getElementById('view-newpost');
+    if (!el) return;
     const s = this.state.wizardStep;
     el.innerHTML = `
       <div class="wizard">
@@ -330,6 +387,7 @@ const App = {
         <div class="panel glass" id="wizard-body"></div>
       </div>`;
     const body = document.getElementById('wizard-body');
+    if (!body) return;
     if (s === 1) body.innerHTML = this._wizardStep1();
     if (s === 2) body.innerHTML = this._wizardStep2();
     if (s === 3) body.innerHTML = this._wizardStep3();
@@ -427,7 +485,7 @@ const App = {
       });
     }
 
-    if (step === 3) {
+    if (step === 3 && typeof Uploader !== 'undefined' && Uploader.init) {
       Uploader.init(document.getElementById('dropzone'), document.getElementById('upload-grid'), document.getElementById('file-input'));
       document.getElementById('w-generate')?.addEventListener('click', () => this._collectStep(3, () => this._previewGenerated()));
       document.getElementById('w-publish')?.addEventListener('click', () => this._collectStep(3, () => this._submitPost()));
@@ -462,6 +520,7 @@ const App = {
   },
 
   _previewGenerated() {
+    if (typeof Generator === 'undefined' || typeof Uploader === 'undefined') return;
     const html = Generator.build(this.state.wizardData, Uploader.doneImages());
     UI.openModal({
       title: 'معاينة صفحة التحميل',
@@ -476,6 +535,7 @@ const App = {
   async _submitPost() {
     const d = this.state.wizardData;
     if (!d.name) { UI.toast('أكمل الخطوة الأولى أولاً', 'error'); return; }
+    if (typeof Generator === 'undefined' || typeof Uploader === 'undefined') return;
     const html = Generator.build(d, Uploader.doneImages());
     try {
       UI.showLoading('جارِ نشر المقال...');
@@ -502,19 +562,20 @@ const App = {
 
   async renderProjects() {
     const el = document.getElementById('view-projects');
+    if (!el) return;
     el.innerHTML = `
       <div class="page-head">
         <div><h1>المشاريع</h1><p>إدارة جميع تطبيقاتك من مكان واحد</p></div>
         <button class="btn btn-primary" id="add-project-btn">+ مشروع جديد</button>
       </div>
       <div class="grid grid-3" id="projects-grid"></div>`;
-    document.getElementById('add-project-btn').addEventListener('click', () => this._projectModal());
+    document.getElementById('add-project-btn')?.addEventListener('click', () => this._projectModal());
     this._renderProjectsGrid();
   },
 
   _renderProjectsGrid() {
     const grid = document.getElementById('projects-grid');
-    if (!grid) return;
+    if (!grid || typeof Projects === 'undefined') return;
     grid.innerHTML = Projects.list.map((p) => `
       <div class="stat-card glass" data-id="${p.id}">
         <div class="gap-8" style="align-items:center;">
@@ -534,13 +595,13 @@ const App = {
 
     grid.querySelectorAll('[data-id]').forEach((card) => {
       const id = card.dataset.id;
-      card.querySelector('.switch-btn').addEventListener('click', () => {
+      card.querySelector('.switch-btn')?.addEventListener('click', () => {
         Projects.setCurrent(id);
         this._renderProjectSwitch();
         UI.toast('تم تفعيل المشروع', 'success');
       });
-      card.querySelector('.edit-btn').addEventListener('click', () => this._projectModal(Projects.find(id)));
-      card.querySelector('.del-btn').addEventListener('click', async () => {
+      card.querySelector('.edit-btn')?.addEventListener('click', () => this._projectModal(Projects.find(id)));
+      card.querySelector('.del-btn')?.addEventListener('click', async () => {
         const ok = await UI.confirm({ title: 'حذف المشروع', body: 'سيتم حذف المشروع نهائياً.' });
         if (!ok) return;
         try { await Projects.remove(id); this._renderProjectsGrid(); this._renderProjectSwitch(); UI.toast('تم الحذف', 'success'); }
@@ -589,7 +650,7 @@ const App = {
 
   _renderProjectSwitch() {
     const el = document.getElementById('current-project');
-    if (!el) return;
+    if (!el || typeof Projects === 'undefined') return;
     const p = Projects.current;
     el.innerHTML = p
       ? `${p.icon ? `<img src="${p.icon}">` : '<div class="ph"></div>'}<div class="meta"><b>${UI.escapeHTML(p.name)}</b><span>${p.status === 'active' ? 'نشط' : 'متوقف'}</span></div>`
@@ -602,7 +663,8 @@ const App = {
 
   renderSettings() {
     const el = document.getElementById('view-settings');
-    const c = Auth.config || {};
+    if (!el) return;
+    const c = (typeof Auth !== 'undefined' && Auth.config) ? Auth.config : {};
     el.innerHTML = `
       <div class="page-head"><div><h1>الإعدادات</h1><p>بيانات الاتصال — مشفّرة داخل متصفحك</p></div></div>
       <div class="panel glass">
@@ -624,7 +686,8 @@ const App = {
         <button class="btn btn-primary" id="save-settings-btn">حفظ الإعدادات في المتصفح</button>
       </div>`;
 
-    document.getElementById('save-settings-btn').addEventListener('click', async () => {
+    document.getElementById('save-settings-btn')?.addEventListener('click', async () => {
+      if (typeof Auth === 'undefined' || !Auth.config) return;
       Object.assign(Auth.config, {
         blogId: document.getElementById('cfg-blogId').value.trim(),
         clientId: document.getElementById('cfg-clientId').value.trim(),
