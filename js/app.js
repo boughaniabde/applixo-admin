@@ -168,13 +168,60 @@ const App = {
   async renderDashboard() {
     const el = document.getElementById('view-dashboard');
     if (!el) return;
+    
+    const c = (typeof Auth !== 'undefined' && Auth.config) ? Auth.config : {};
+
     el.innerHTML = `
       <div class="page-head"><div><h1>لوحة المعلومات</h1><p>نظرة عامة على مدونتك ومشاريعك</p></div></div>
       <div class="grid grid-4" id="dash-stats">${UI.skeletonRows(4, 96)}</div>
+      
+      <!-- [ميزة جديدة] لوحة إدارة وتعديل كافة المعطيات مباشرة وحياً من صفحة الرئيسية -->
+      <div class="panel glass" style="margin-top:18px; padding:20px;">
+        <div class="panel-head" style="margin-bottom:15px;">
+          <h3>⚙️ إدارة وتعديل كافة معطيات المحرك والمفاتيح</h3>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+            <div class="field" style="margin:0;"><label style="font-size:12px;">Blog ID</label><input type="text" id="quick-blogId" value="${c.blogId || ''}" placeholder="معرف المدونة"></div>
+            <div class="field" style="margin:0;"><label style="font-size:12px;">Gemini API Key</label><input type="password" id="quick-gemini" value="${c.geminiApiKey || ''}" placeholder="مفتاح جيرمي"></div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+            <div class="field" style="margin:0;"><label style="font-size:12px;">Client ID</label><input type="text" id="quick-clientId" value="${c.clientId || ''}" placeholder="Google Client ID"></div>
+            <div class="field" style="margin:0;"><label style="font-size:12px;">Client Secret</label><input type="password" id="quick-clientSecret" value="${c.clientSecret || ''}" placeholder="Google Client Secret"></div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+            <div class="field" style="margin:0;"><label style="font-size:12px;">Refresh Token</label><input type="password" id="quick-refreshToken" value="${c.refreshToken || ''}" placeholder="OAuth2 Refresh Token"></div>
+            <div class="field" style="margin:0;"><label style="font-size:12px;">ImgBB API Key</label><input type="password" id="quick-imgbb" value="${c.imgbbApiKey || ''}" placeholder="ImgBB API Key"></div>
+          </div>
+          <button type="button" class="btn btn-primary" id="save-quick-settings-btn" style="width: 100%; padding: 10px; margin-top: 5px; font-weight: bold;">💾 حفظ وتحديث المعطيات حياً</button>
+        </div>
+      </div>
+
       <div class="panel glass" style="margin-top:18px;">
         <div class="panel-head"><h3>أحدث المقالات</h3><button class="btn btn-sm btn-ghost" data-view="posts" onclick="App.navigate('posts')">عرض الكل</button></div>
         <div id="dash-recent">${UI.skeletonRows(4, 64)}</div>
       </div>`;
+
+    // ربط ميكانيكية الحفظ السريع داخل الرئيسية
+    document.getElementById('save-quick-settings-btn')?.addEventListener('click', async () => {
+      if (typeof Auth === 'undefined' || !Auth.config) return;
+      Object.assign(Auth.config, {
+        blogId: document.getElementById('quick-blogId').value.trim(),
+        clientId: document.getElementById('quick-clientId').value.trim(),
+        clientSecret: document.getElementById('quick-clientSecret').value.trim(),
+        refreshToken: document.getElementById('quick-refreshToken').value.trim(),
+        imgbbApiKey: document.getElementById('quick-imgbb').value.trim(),
+        geminiApiKey: document.getElementById('quick-gemini').value.trim(),
+      });
+      try {
+        UI.showLoading('جارِ حفظ وتثبيت البيانات...');
+        await Auth.persistConfig('');
+        UI.toast('تم تحديث كافة المعطيات وحفظها بنجاح!', 'success');
+        this.renderDashboard();
+      } catch (err) {
+        UI.toast(err.message, 'error');
+      } finally { UI.hideLoading(); }
+    });
 
     try {
       const res = await Blogger.getPosts({ maxResults: 6 });
@@ -222,7 +269,6 @@ const App = {
       this._renderPostList(this.state.posts);
       const moreBtn = document.getElementById('load-more-btn');
       if (this.state.nextPageToken && moreBtn) {
-        moreBtn.classList.remove('hidden');
         moreBtn.onclick = async () => {
           const more = await Blogger.getPosts({ maxResults: 15, pageToken: this.state.nextPageToken });
           this.state.posts = [...this.state.posts, ...(more.items || [])];
@@ -332,7 +378,7 @@ const App = {
     const s = this.state.wizardStep;
     el.innerHTML = `
       <div class="wizard">
-        <div class="page-head"><div><h1>مقال جديد</h1><p>الخطوة ${s} من 3</p></div></div>
+        <div class="page-head"><div><h1>مقال جديد</h1><p id="wiz-step-indicator">الخطوة ${s} من 3</p></div></div>
         <div class="wizard-steps">
           ${[1, 2, 3].map((n) => `<div class="step ${n < s ? 'done' : n === s ? 'current' : ''}"><i></i></div>`).join('')}
         </div>
@@ -349,9 +395,16 @@ const App = {
   _wizardStep1() {
     const d = this.state.wizardData;
     return `
-      <div class="field"><label>اسم التطبيق</label><input type="text" id="w-name" value="${d.name || ''}"></div>
+      <!-- [ميزة جديدة] دمج زر التوليد الذكي عبر Gemini بداخل حقل إدخال اسم التطبيق -->
+      <div class="field">
+        <label>اسم التطبيق</label>
+        <div style="display: flex; gap: 8px; width: 100%;">
+          <input type="text" id="w-name" value="${d.name || ''}" placeholder="مثال: MT Manager" style="flex: 1;">
+          <button type="button" class="btn btn-primary" id="w-gemini-btn" style="white-space: nowrap; font-weight: bold; background: #6366f1;">✨ إنشاء البيانات</button>
+        </div>
+      </div>
       <div class="field"><label>اسم المطور</label><input type="text" id="w-developer" value="${d.developer || ''}"></div>
-      <div class="field"><label>الوصف</label><textarea id="w-description">${d.description || ''}</textarea></div>
+      <div class="field"><label>الوصف</label><textarea id="w-description" rows="5">${d.description || ''}</textarea></div>
       <div class="field"><label>رابط الأيقونة</label><input type="url" id="w-icon" value="${d.icon || ''}" placeholder="https://..."></div>
       <div class="wizard-actions"><span></span><button class="btn btn-primary" id="w-next">التالي ←</button></div>`;
   },
@@ -382,7 +435,7 @@ const App = {
       <div class="field">
         <label>التصنيفات / الوسوم</label>
         <div class="chip-select" id="w-labels-chips">
-          ${['تتطبيقات', 'ألعاب', 'أدوات', 'أندرويد', 'مجاني'].map((l) => `<span class="chip ${d.labels?.includes(l) ? 'active' : ''}" data-label="${l}">${l}</span>`).join('')}
+          ${['تطبيقات', 'ألعاب', 'أدوات', 'أندرويد', 'مجاني'].map((l) => `<span class="chip ${d.labels?.includes(l) ? 'active' : ''}" data-label="${l}">${l}</span>`).join('')}
         </div>
       </div>
       <div class="wizard-actions">
@@ -414,6 +467,59 @@ const App = {
   },
 
   _bindWizardStep(step) {
+    // ربط آلية التوليد التلقائي عبر Gemini داخل الخطوة الأولى
+    if (step === 1) {
+      document.getElementById('w-gemini-btn')?.addEventListener('click', async () => {
+        const appName = document.getElementById('w-name').value.trim();
+        const apiKey = (typeof Auth !== 'undefined' && Auth.config) ? Auth.config.geminiApiKey : '';
+
+        if (!appName) {
+          UI.toast('يرجى إدخال اسم التطبيق أولاً!', 'error');
+          return;
+        }
+        if (!apiKey) {
+          UI.toast('يرجى إدخال مفتاح Gemini API Key في لوحة التحكم أولاً!', 'error');
+          return;
+        }
+
+        const btn = document.getElementById('w-gemini-btn');
+        btn.innerText = '⏳ جاري الجلب...';
+        btn.disabled = true;
+
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `أنت مساعد وخبير سيو متخصص في تطبيقات أندرويد. قم باستخراج وإنشاء بيانات تطبيق "${appName}" بصيغة JSON كالتالي تماماً وبدون أي نصوص برمجية أخرى خارج القوسين: {"developer": "اسم المطور", "description": "وصف ومراجعة شاملة واحترافية جداً ومغرية للتحميل ومتوافقة تماماً مع شروط سيو جوجل للمقالات لتبدو كاتب محترف"، "version": "رقم آخر إصدار تخيلي مستقر"، "size": "حجم التطبيق التقريبي ميغابايت"، "android": "أقل نسخة أندرويد يتطلبها التطبيق مثل 6.0+"}. اكتب الوصف باللغة العربية الفصحى.` }] }]
+            })
+          });
+
+          const resData = await response.json();
+          const rawText = resData.candidates[0].content.parts[0].text;
+          const cleanJson = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+
+          // ملء الحقول في الواجهة الحالية
+          if (document.getElementById('w-developer')) document.getElementById('w-developer').value = cleanJson.developer || '';
+          if (document.getElementById('w-description')) document.getElementById('w-description').value = cleanJson.description || '';
+          
+          // حفظ القيم الإضافية مؤقتاً لحقنها تلقائياً في الخطوة الثانية
+          this.state.wizardData.version = cleanJson.version || '';
+          this.state.wizardData.size = cleanJson.size || '';
+          this.state.wizardData.android = cleanJson.android || '';
+          this.state.wizardData.updatedAt = new Date().toISOString().split('T')[0];
+
+          UI.toast('تم إنشاء وتعبئة البيانات بنجاح بواسطة Gemini!', 'success');
+        } catch (err) {
+          console.error(err);
+          UI.toast('فشل التوليد، تأكد من صلاحية المفتاح والاتصال.', 'error');
+        } finally {
+          btn.innerText = '✨ إنشاء البيانات';
+          btn.disabled = false;
+        }
+      });
+    }
+
     document.getElementById('w-next')?.addEventListener('click', () => this._collectStep(step, () => {
       this.state.wizardStep = step + 1;
       this._paintWizard();
