@@ -505,117 +505,6 @@ const App = {
         const appName = document.getElementById('w-name').value.trim();
         let apiKey = '';
         
-        if (typeof Auth !== 'undefined' && Auth.config && Auth.config.geminiApiKey) {
-          apiKey = Auth.config.geminiApiKey;
-        } else {
-          try {
-            const encryptedData = localStorage.getItem('blogger_control_config');
-            if (encryptedData) {
-              const parsed = JSON.parse(encryptedData);
-              if (parsed.geminiApiKey) apiKey = parsed.geminiApiKey;
-              else if (Auth.config && Auth.config.geminiApiKey) apiKey = Auth.config.geminiApiKey;
-            }
-            if (!apiKey) {
-              const lData = JSON.parse(localStorage.getItem('b_config') || localStorage.getItem('app_secrets') || '{}');
-              apiKey = lData?.geminiApiKey || '';
-            }
-          } catch(e) { console.error("خطأ في قراءة مفتاح Gemini:", e); }
-        }
-
-        if (!appName) {
-          UI.toast('يرجى إدخال اسم التطبيق أولاً!', 'error');
-          return;
-        }
-        if (!apiKey) {
-          UI.toast('يرجى إدخال مفتاح Gemini API Key في لوحة التحكم وحفظه أولاً!', 'error');
-          return;
-        }
-
-        const btn = document.getElementById('w-gemini-btn');
-        const originalText = btn.innerText;
-        btn.innerText = '⏳ جاري الجلب...';
-        btn.disabled = true;
-
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: `أنت مساعد وخبير سيو متخصص في تطبيقات أندرويد. قم باستخراج وإنشاء بيانات تطبيق "${appName}" بصيغة JSON كالتالي تماماً وبدون أي نصوص برمجية أخرى خارج القوسين: {"developer": "اسم المطور", "description": "وصف ومراجعة شاملة واحترافية جداً ومغرية للتحميل ومتوافقة تماماً مع شروط سيو جوجل للمقالات لتبدو كاتب محترف"، "version": "رقم آخر إصدار تخيلي مستقر"، "size": "حجم التطبيق التقريبي ميغابايت", "android": "أقل نسخة أندرويد يتطلبها التطبيق مثل 6.0+"}. اكتب الوصف باللغة العربية الفصحى.` }] }]
-            })
-          });
-
-          if (!response.ok) throw new Error(`تعذر الاتصال بالخادم: ${response.status}`);
-
-          const resData = await response.json();
-          if (!resData.candidates || !resData.candidates[0]) throw new Error('لم يرجع نموذج Gemini أي بيانات.');
-
-          let rawText = resData.candidates[0].content.parts[0].text;
-          
-          // تنظيف ذكي وقوي للنص البرمجي لضمان نجاح التوليد
-          rawText = rawText.replace(/```json/gi, '')
-                           .replace(/```/g, '')
-                           .replace(/^\s+|\s+$/g, '')
-                           .trim();
-                           
-          const cleanJson = JSON.parse(rawText);
-
-          if (document.getElementById('w-developer')) document.getElementById('w-developer').value = cleanJson.developer || '';
-          if (document.getElementById('w-description')) document.getElementById('w-description').value = cleanJson.description || '';
-          
-          this.state.wizardData.version = cleanJson.version || '1.0';
-          this.state.wizardData.size = cleanJson.size || 'عبر الرابط';
-          this.state.wizardData.android = cleanJson.android || '5.0+';
-          this.state.wizardData.updatedAt = new Date().toISOString().split('T')[0];
-
-          UI.toast('تم إنشاء وتعبئة البيانات بنجاح بواسطة Gemini!', 'success');
-        } catch (err) {
-          console.error("خطأ التوليد الشامل:", err);
-          UI.toast('فشل التوليد، تأكد من صلاحية المفتاح أو جرب مجدداً.', 'error');
-        } finally {
-          btn.innerText = originalText;
-          btn.disabled = false;
-        }
-      });
-    }
-
-    document.getElementById('w-next')?.addEventListener('click', () => this._collectStep(step, () => {
-      this.state.wizardStep = step + 1;
-      this._paintWizard();
-    }));
-    document.getElementById('w-back')?.addEventListener('click', () => {
-      this._collectStep(step, () => {}, false);
-      this.state.wizardStep = step - 1;
-      this._paintWizard();
-    });
-
-    if (step === 2) {
-      document.querySelectorAll('#w-labels-chips .chip').forEach((chip) => {
-        chip.addEventListener('click', () => {
-          chip.classList.toggle('active');
-          const label = chip.dataset.label;
-          const d = this.state.wizardData;
-          d.labels = d.labels || [];
-          if (chip.classList.contains('active')) d.labels.push(label);
-          else d.labels = d.labels.filter((l) => l !== label);
-        });
-      });
-    }
-
-    if (step === 3 && typeof Uploader !== 'undefined' && Uploader.init) {
-      Uploader.init(document.getElementById('dropzone'), document.getElementById('upload-grid'), document.getElementById('file-input'));
-      document.getElementById('w-generate')?.addEventListener('click', () => this._collectStep(3, () => this._previewGenerated()));
-      document.getElementById('w-publish')?.addEventListener('click', () => this._collectStep(3, () => this._submitPost()));
-    }
-  },
-
-  _collectStep(step, cb, validate = true) {
-    const d = this.state.wizardData;
-        if (step === 1) {
-      document.getElementById('w-gemini-btn')?.addEventListener('click', async () => {
-        const appName = document.getElementById('w-name').value.trim();
-        let apiKey = '';
-        
         // 1. محاولة جلب المفتاح بكافة الطرق الممكنة المخزنة في جهازك
         try {
           if (typeof Auth !== 'undefined' && Auth.config && Auth.config.geminiApiKey) {
@@ -698,6 +587,50 @@ const App = {
       });
     }
 
+    document.getElementById('w-next')?.addEventListener('click', () => this._collectStep(step, () => {
+      this.state.wizardStep = step + 1;
+      this._paintWizard();
+    }));
+    document.getElementById('w-back')?.addEventListener('click', () => {
+      this._collectStep(step, () => {}, false);
+      this.state.wizardStep = step - 1;
+      this._paintWizard();
+    });
+
+    if (step === 2) {
+      document.querySelectorAll('#w-labels-chips .chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          chip.classList.toggle('active');
+          const label = chip.dataset.label;
+          const d = this.state.wizardData;
+          d.labels = d.labels || [];
+          if (chip.classList.contains('active')) d.labels.push(label);
+          else d.labels = d.labels.filter((l) => l !== label);
+        });
+      });
+    }
+
+    if (step === 3 && typeof Uploader !== 'undefined' && Uploader.init) {
+      Uploader.init(document.getElementById('dropzone'), document.getElementById('upload-grid'), document.getElementById('file-input'));
+      document.getElementById('w-generate')?.addEventListener('click', () => this._collectStep(3, () => this._previewGenerated()));
+      document.getElementById('w-publish')?.addEventListener('click', () => this._collectStep(3, () => this._submitPost()));
+    }
+  },
+
+  _collectStep(step, cb, validate = true) {
+    const d = this.state.wizardData;
+    
+    if (step === 1) {
+      d.name = document.getElementById('w-name').value.trim();
+      d.developer = document.getElementById('w-developer').value.trim();
+      d.description = document.getElementById('w-description').value.trim();
+      d.icon = document.getElementById('w-icon').value.trim();
+      
+      if (validate && !d.name) {
+        UI.toast('يرجى إدخال اسم التطبيق على الأقل!', 'error');
+        return;
+      }
+    }
     if (step === 2) {
       d.version = document.getElementById('w-version').value.trim();
       d.size = document.getElementById('w-size').value.trim();
