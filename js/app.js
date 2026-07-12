@@ -668,4 +668,4 @@ const App = {
   },
 };
 
-document.addEventListener('DOMContentLoaded', () => App.init());
+document.addEventListener("DOMContentLoaded", () => {     alert("App يعمل");     App.init(); });
