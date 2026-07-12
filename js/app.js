@@ -39,6 +39,7 @@ const App = {
     const form = document.getElementById('lock-form');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      alert("تم الضغط");
       const password = document.getElementById('lock-password').value;
       if (!password || password.length < 6) {
         UI.toast('كلمة المرور يجب ألا تقل عن 6 أحرف', 'error');
