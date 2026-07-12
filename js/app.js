@@ -155,7 +155,6 @@ const App = {
       } catch (err) { UI.toast(err.message, 'error'); }
     }, 400));
 
-    // زر القفل القديم يقوم الآن بعمل إعادة تعيين للجلسة أو تحديث الصفحة فقط
     document.getElementById('lock-btn')?.addEventListener('click', () => {
       location.reload();
     });
@@ -169,7 +168,6 @@ const App = {
     const el = document.getElementById('view-dashboard');
     if (!el) return;
     
-    // تأمين جلب الـ Config حتى لو لم يقم ملف auth.js بتهيئته بالكامل بعد
     let c = {};
     if (typeof Auth !== 'undefined' && Auth.config) {
       c = Auth.config;
@@ -184,7 +182,6 @@ const App = {
       <div class="page-head"><div><h1>لوحة المعلومات</h1><p>نظرة عامة على مدونتك ومشاريعك</p></div></div>
       <div class="grid grid-4" id="dash-stats">${UI.skeletonRows(4, 96)}</div>
       
-      <!-- لوحة إدارة وتعديل كافة المعطيات مباشرة وحياً من صفحة الرئيسية -->
       <div class="panel glass" style="margin-top:18px; padding:20px;">
         <div class="panel-head" style="margin-bottom:15px;">
           <h3>⚙️ إدارة وتعديل كافة معطيات المحرك والمفاتيح</h3>
@@ -211,7 +208,6 @@ const App = {
         <div id="dash-recent">${UI.skeletonRows(4, 64)}</div>
       </div>`;
 
-    // ربط ميكانيكية الحفظ السريع وتفادي فخ أخطاء عدم تهيئة الجلسة
     document.getElementById('save-quick-settings-btn')?.addEventListener('click', async () => {
       const updatedSecrets = {
         blogId: document.getElementById('quick-blogId').value.trim(),
@@ -230,7 +226,6 @@ const App = {
       try {
         UI.showLoading('جارِ حفظ وتثبيت البيانات...');
         
-        // إذا كان التطبيق يستخدم دالة persistConfig نستخدمها، وإلا نحقنها في الـ localStorage فوراً لضمان عدم الضياع
         if (typeof Auth !== 'undefined' && Auth.persistConfig) {
           await Auth.persistConfig('');
         } else {
@@ -240,7 +235,6 @@ const App = {
 
         UI.toast('تم تحديث كافة المعطيات وحفظ الجلسة بنجاح!', 'success');
         
-        // تجديد التوكن لربط الجلسة حياً بعد التحديث مباشرة
         if (typeof Auth !== 'undefined' && Auth.getAccessToken) {
           try { await Auth.getAccessToken(); } catch(e) {}
         }
@@ -267,7 +261,6 @@ const App = {
       document.getElementById('dash-recent').innerHTML = items.map((p) => this._postRowHTML(p)).join('') || '<p class="muted">لا توجد مقالات بعد.</p>';
       this._bindPostRowActions(document.getElementById('dash-recent'));
     } catch (err) {
-      // تفادي إزعاج المستخدم بـ Toasts إذا لم تكن الإعدادات مكتملة عند أول تشغيل باللوحة
       const recentEl = document.getElementById('dash-recent');
       if(recentEl) recentEl.innerHTML = `<p class="muted">يرجى ملء معطيات الاتصال بالخلفية لفتح المزامنة التلقائية.</p>`;
     }
@@ -340,26 +333,42 @@ const App = {
   _bindPostRowActions(container) {
     container.querySelectorAll('.post-row').forEach((row) => {
       const id = row.dataset.id;
-      row.querySelector('.edit-btn')?.addEventListener('click', (e) => { e.stopPropagation(); this._openEditPost(id); });
+      
+      row.querySelector('.edit-btn')?.addEventListener('click', async (e) => { 
+        e.stopPropagation(); 
+        if (typeof Auth !== 'undefined' && Auth.getAccessToken) {
+          try { await Auth.getAccessToken(); } catch(err) { console.warn("حظر تهيئة التوكن:", err); }
+        }
+        this._openEditPost(id); 
+      });
+
       row.querySelector('.del-btn')?.addEventListener('click', async (e) => {
         e.stopPropagation();
         const ok = await UI.confirm({ title: 'حذف المقال', body: 'هل أنت متأكد من حذف هذا المقال؟ لا يمكن التراجع عن هذا الإجراء.' });
         if (!ok) return;
         try {
           UI.showLoading('جارِ الحذف...');
+          if (typeof Auth !== 'undefined' && Auth.getAccessToken) {
+            try { await Auth.getAccessToken(); } catch(e) {}
+          }
           await Blogger.deletePost(id);
           UI.toast('تم حذف المقال', 'success');
           row.remove();
-        } catch (err) { UI.toast(err.message, 'error'); }
-        finally { UI.hideLoading(); }
+        } catch (err) { 
+          UI.toast(err.message || 'فشلت العملية، تأكد من الجلسة', 'error'); 
+        } finally { UI.hideLoading(); }
       });
     });
   },
 
   async _openEditPost(id) {
     try {
-      UI.showLoading('جارِ تحميل المقال...');
+      UI.showLoading('جارِ تحميل المقال وتأكيد الجلسة...');
+      if (typeof Auth !== 'undefined' && Auth.getAccessToken) {
+        await Auth.getAccessToken();
+      }
       const post = await Blogger.getPost(id);
+      
       UI.openModal({
         title: 'تعديل المقال',
         body: `
@@ -373,22 +382,33 @@ const App = {
             label: 'حفظ التغييرات', cls: 'btn-primary', close: true,
             onClick: async () => {
               try {
-                UI.showLoading('جارِ الحفظ...');
+                UI.showLoading('جارِ الحفظ وتحديث التعديلات...');
+                if (typeof Auth !== 'undefined' && Auth.getAccessToken) {
+                  await Auth.getAccessToken();
+                }
+
                 await Blogger.updatePost(id, {
                   title: document.getElementById('e-title').value,
                   content: document.getElementById('e-content').value,
                   labels: document.getElementById('e-labels').value.split(',').map((s) => s.trim()).filter(Boolean),
                 });
-                UI.toast('تم تحديث المقال', 'success');
-                this.renderPosts();
-              } catch (err) { UI.toast(err.message, 'error'); }
-              finally { UI.hideLoading(); }
+                
+                UI.toast('تم تحديث المقال بنجاح', 'success');
+                if (document.getElementById('view-posts').classList.contains('active')) {
+                  this.renderPosts();
+                } else {
+                  this.renderDashboard();
+                }
+              } catch (err) { 
+                UI.toast(err.message || 'خطأ أثناء الحفظ، تحقق من الجلسة', 'error'); 
+              } finally { UI.hideLoading(); }
             },
           },
         ],
       });
-    } catch (err) { UI.toast(err.message, 'error'); }
-    finally { UI.hideLoading(); }
+    } catch (err) { 
+      UI.toast(err.message || 'لا توجد جلسة مفتوحة أو انتهت صلاحية التوكن', 'error'); 
+    } finally { UI.hideLoading(); }
   },
 
   /* ================================================================ */
@@ -499,8 +519,6 @@ const App = {
     if (step === 1) {
       document.getElementById('w-gemini-btn')?.addEventListener('click', async () => {
         const appName = document.getElementById('w-name').value.trim();
-        
-        // جلب المفتاح بشكل آمن ومباشر من أي مصدر تخزيني متاح لتجنب خطأ الجلسة الفارغة
         let apiKey = '';
         if (typeof Auth !== 'undefined' && Auth.config && Auth.config.geminiApiKey) {
           apiKey = Auth.config.geminiApiKey;
