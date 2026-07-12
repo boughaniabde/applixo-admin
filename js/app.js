@@ -1,10 +1,8 @@
 /**
- * app.js (LocalStorage Edition - Passwordless Auto-Boot)
+ * app.js (LocalStorage Edition - Complete Fix)
  * Application entry point. Boots the UI, bypasses the lock screen,
  * wires navigation between views, and contains the view-specific
  * rendering logic (dashboard stats, posts list + search, wizard, projects, settings).
- *
- * Password/Lock screen functionality completely bypassed as requested.
  */
 
 const App = {
@@ -27,18 +25,15 @@ const App = {
       const screenEl = document.getElementById('lock-screen');
       
       if (exists) {
-        // إذا كانت الإعدادات موجودة، يتم تخطي الشاشة والتشغيل تلقائياً بدون كلمة مرور
         if (screenEl) screenEl.classList.add('hidden');
         
-        // محاكاة فتح القفل محلياً بالقيمة الافتراضية إذا كان نظام auth.js يتطلب استدعاء unlock
         if (typeof Auth !== 'undefined' && Auth.unlock) {
-          try { await Auth.unlock(''); } catch(e) { /* تجاوز أخطاء التشفير إن وجدت */ }
+          try { await Auth.unlock(''); } catch(e) { /* تجاوز أخطاء التشفير */ }
         }
         
         await this._boot();
       } else {
-        // إذا لم يكن هناك إعداد بعد، يتم توجيه المستخدم لإنشاء الإعداد مباشرة
-        if (screenEl) screenEl.classList.add('hidden'); // إخفاء واجهة القفل
+        if (screenEl) screenEl.classList.add('hidden');
         await this._runFirstTimeSetup();
       }
     } catch (globalErr) {
@@ -49,7 +44,6 @@ const App = {
     }
   },
 
-  /** التهيئة لأول مرة: جمع البيانات وحفظها مباشرة بالمتصفح بدون تشفير بكلمة مرور */
   async _runFirstTimeSetup() {
     if (typeof UI === 'undefined' || !UI.openModal) {
       alert("مكتبة الواجهة UI.openModal غير معرّفة!");
@@ -85,7 +79,6 @@ const App = {
           };
 
           if (typeof Auth !== 'undefined' && Auth.createConfig) {
-            // نمرر قيمة فارغة مكان كلمة المرور
             await Auth.createConfig(secrets, '');
             UI.toast('تم حفظ الإعدادات بنجاح في متصفحك!', 'success');
             await this._boot();
@@ -96,10 +89,6 @@ const App = {
       }],
     });
   },
-
-  /* ================================================================ */
-  /* Boot after unlock                                                  */
-  /* ================================================================ */
 
   async _boot() {
     if (typeof UI !== 'undefined' && UI.setConnectionStatus) UI.setConnectionStatus('warn');
@@ -119,10 +108,6 @@ const App = {
     }
     this.navigate('dashboard');
   },
-
-  /* ================================================================ */
-  /* Navigation                                                         */
-  /* ================================================================ */
 
   _bindNav() {
     document.querySelectorAll('.nav-item[data-view]').forEach((el) => {
@@ -173,7 +158,7 @@ const App = {
       c = Auth.config;
     } else {
       try {
-        const localData = localStorage.getItem('b_config') || localStorage.getItem('app_secrets');
+        const localData = localStorage.getItem('blogger_control_config') || localStorage.getItem('b_config');
         if (localData) c = JSON.parse(localData);
       } catch(e) {}
     }
@@ -227,10 +212,9 @@ const App = {
         UI.showLoading('جارِ حفظ وتثبيت البيانات...');
         
         if (typeof Auth !== 'undefined' && Auth.persistConfig) {
-          await Auth.persistConfig('');
+          await Auth.persistConfig();
         } else {
-          localStorage.setItem('b_config', JSON.stringify(updatedSecrets));
-          localStorage.setItem('app_secrets', JSON.stringify(updatedSecrets));
+          localStorage.setItem('blogger_control_config', JSON.stringify(updatedSecrets));
         }
 
         UI.toast('تم تحديث كافة المعطيات وحفظ الجلسة بنجاح!', 'success');
@@ -520,13 +504,22 @@ const App = {
       document.getElementById('w-gemini-btn')?.addEventListener('click', async () => {
         const appName = document.getElementById('w-name').value.trim();
         let apiKey = '';
+        
         if (typeof Auth !== 'undefined' && Auth.config && Auth.config.geminiApiKey) {
           apiKey = Auth.config.geminiApiKey;
         } else {
           try {
-            const lData = JSON.parse(localStorage.getItem('b_config') || localStorage.getItem('app_secrets'));
-            apiKey = lData?.geminiApiKey || '';
-          } catch(e) {}
+            const encryptedData = localStorage.getItem('blogger_control_config');
+            if (encryptedData) {
+              const parsed = JSON.parse(encryptedData);
+              if (parsed.geminiApiKey) apiKey = parsed.geminiApiKey;
+              else if (Auth.config && Auth.config.geminiApiKey) apiKey = Auth.config.geminiApiKey;
+            }
+            if (!apiKey) {
+              const lData = JSON.parse(localStorage.getItem('b_config') || localStorage.getItem('app_secrets') || '{}');
+              apiKey = lData?.geminiApiKey || '';
+            }
+          } catch(e) { console.error("خطأ في قراءة مفتاح Gemini:", e); }
         }
 
         if (!appName) {
@@ -534,11 +527,12 @@ const App = {
           return;
         }
         if (!apiKey) {
-          UI.toast('يرجى إدخال مفتاح Gemini API Key في لوحة التحكم أولاً!', 'error');
+          UI.toast('يرجى إدخال مفتاح Gemini API Key في لوحة التحكم وحفظه أولاً!', 'error');
           return;
         }
 
         const btn = document.getElementById('w-gemini-btn');
+        const originalText = btn.innerText;
         btn.innerText = '⏳ جاري الجلب...';
         btn.disabled = true;
 
@@ -547,28 +541,39 @@ const App = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: `أنت مساعد وخبير سيو متخصص في تطبيقات أندرويد. قم باستخراج وإنشاء بيانات تطبيق "${appName}" بصيغة JSON كالتالي تماماً وبدون أي نصوص برمجية أخرى خارج القوسين: {"developer": "اسم المطور", "description": "وصف ومراجعة شاملة واحترافية جداً ومغرية للتحميل ومتوافقة تماماً مع شروط سيو جوجل للمقالات لتبدو كاتب محترف"، "version": "رقم آخر إصدار تخيلي مستقر Bryan"، "size": "حجم التطبيق التقريبي ميغابايت", "android": "أقل نسخة أندرويد يتطلبها التطبيق مثل 6.0+"}. اكتب الوصف باللغة العربية الفصحى.` }] }]
+              contents: [{ parts: [{ text: `أنت مساعد وخبير سيو متخصص في تطبيقات أندرويد. قم باستخراج وإنشاء بيانات تطبيق "${appName}" بصيغة JSON كالتالي تماماً وبدون أي نصوص برمجية أخرى خارج القوسين: {"developer": "اسم المطور", "description": "وصف ومراجعة شاملة واحترافية جداً ومغرية للتحميل ومتوافقة تماماً مع شروط سيو جوجل للمقالات لتبدو كاتب محترف"، "version": "رقم آخر إصدار تخيلي مستقر"، "size": "حجم التطبيق التقريبي ميغابايت", "android": "أقل نسخة أندرويد يتطلبها التطبيق مثل 6.0+"}. اكتب الوصف باللغة العربية الفصحى.` }] }]
             })
           });
 
+          if (!response.ok) throw new Error(`تعذر الاتصال بالخادم: ${response.status}`);
+
           const resData = await response.json();
-          const rawText = resData.candidates[0].content.parts[0].text;
-          const cleanJson = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+          if (!resData.candidates || !resData.candidates[0]) throw new Error('لم يرجع نموذج Gemini أي بيانات.');
+
+          let rawText = resData.candidates[0].content.parts[0].text;
+          
+          // تنظيف ذكي وقوي للنص البرمجي لضمان نجاح التوليد
+          rawText = rawText.replace(/```json/gi, '')
+                           .replace(/```/g, '')
+                           .replace(/^\s+|\s+$/g, '')
+                           .trim();
+                           
+          const cleanJson = JSON.parse(rawText);
 
           if (document.getElementById('w-developer')) document.getElementById('w-developer').value = cleanJson.developer || '';
           if (document.getElementById('w-description')) document.getElementById('w-description').value = cleanJson.description || '';
           
-          this.state.wizardData.version = cleanJson.version || '';
-          this.state.wizardData.size = cleanJson.size || '';
-          this.state.wizardData.android = cleanJson.android || '';
+          this.state.wizardData.version = cleanJson.version || '1.0';
+          this.state.wizardData.size = cleanJson.size || 'عبر الرابط';
+          this.state.wizardData.android = cleanJson.android || '5.0+';
           this.state.wizardData.updatedAt = new Date().toISOString().split('T')[0];
 
           UI.toast('تم إنشاء وتعبئة البيانات بنجاح بواسطة Gemini!', 'success');
         } catch (err) {
-          console.error(err);
-          UI.toast('فشل التوليد، تأكد من صلاحية المفتاح والاتصال.', 'error');
+          console.error("خطأ التوليد الشامل:", err);
+          UI.toast('فشل التوليد، تأكد من صلاحية المفتاح أو جرب مجدداً.', 'error');
         } finally {
-          btn.innerText = '✨ إنشاء البيانات';
+          btn.innerText = originalText;
           btn.disabled = false;
         }
       });
@@ -810,8 +815,8 @@ const App = {
       });
       try {
         UI.showLoading('جارِ الحفظ...');
-        await Auth.persistConfig('');
-        UI.toast('تم تحديث الإعدادات داخل الـ LocalStorage بنجاح', 'success');
+        await Auth.persistConfig();
+        UI.toast('تم تحديث الإعدادات بنجاح', 'success');
       } catch (err) {
         UI.toast(err.message, 'error');
       } finally { UI.hideLoading(); }
@@ -822,4 +827,3 @@ const App = {
 document.addEventListener("DOMContentLoaded", () => {
   App.init();
 });
-
