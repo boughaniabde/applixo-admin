@@ -1,0 +1,29 @@
+/* ==========================================================================
+   Theme fine-tuning
+   style.css already defines dark (default) and [data-theme="light"] tokens.
+   This file only holds small per-theme adjustments that aren't pure
+   variables (shadows, image treatment, code blocks, etc).
+   ========================================================================== */
+
+[data-theme="light"] .icon-btn svg,
+[data-theme="light"] .nav-item svg{opacity:.85;}
+
+[data-theme="light"] .stat-card .glyph{
+  background:rgba(109,94,245,.12);
+}
+
+[data-theme="light"] #loading-overlay{
+  background:rgba(238,241,248,.75);
+  color:var(--ink-0);
+}
+
+[data-theme="light"] .modal-backdrop{
+  background:rgba(160,168,196,.35);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb{background:rgba(20,25,50,.15);}
+
+/* Smooth theme-swap for every surface */
+body,.glass,.sidebar,.topbar,.stat-card,.panel,.modal,.field input,.field select,.field textarea{
+  transition:background .35s ease, color .35s ease, border-color .35s ease, box-shadow .35s ease;
+}
