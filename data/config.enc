@@ -1,6 +1,0 @@
-{
-  "v": 1,
-  "salt": "base64-encoded-16-byte-salt",
-  "iv": "base64-encoded-12-byte-iv",
-  "data": "base64-encoded-AES-256-GCM-ciphertext"
-}
