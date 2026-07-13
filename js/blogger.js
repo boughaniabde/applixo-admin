@@ -139,8 +139,8 @@ class BloggerAPI {
   /* ================================================================ */
 
   /** Delegates to generator.js and returns the ready-to-publish HTML string. */
-  generateDownloadPage(project, images = []) {
-    return Generator.build(project, images);
+  generateDownloadPage(project, images = [], template = null) {
+    return Generator.build(project, images, template);
   }
 }
 
